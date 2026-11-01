@@ -351,7 +351,7 @@ data class PlayerSettings(
     /** Open the prepared link ahead of time so the debrid service unlocks the file early. */
     val prewarmNextEpisodeEnabled: Boolean = DEFAULT_PREWARM_NEXT_EPISODE_ENABLED,
     /** With the prewarm, also read the end of the file, where the seek index usually is. */
-    val prewarmNextEpisodeTailEnabled: Boolean = DEFAULT_PREWARM_NEXT_EPISODE_ENABLED,
+    val prewarmNextEpisodeTailEnabled: Boolean = DEFAULT_PREWARM_NEXT_EPISODE_TAIL_ENABLED,
     val stillWatchingEnabled: Boolean = false,
     val stillWatchingEpisodeThreshold: Int = DEFAULT_STILL_WATCHING_EPISODE_THRESHOLD,
     val nextEpisodeThresholdMode: NextEpisodeThresholdMode = NextEpisodeThresholdMode.PERCENTAGE,
@@ -446,6 +446,8 @@ data class PlayerSettings(
         val NEXT_EPISODE_COUNTDOWN_CHOICES: List<Int> = listOf(0, 3, 5, 10, 15)
         /** On in debug builds, so each prewarm step can be compared with it off; off in release builds. */
         val DEFAULT_PREWARM_NEXT_EPISODE_ENABLED: Boolean = com.nuvio.tv.BuildConfig.DEBUG
+        /** Off by default: on the box the end-of-file read did not shorten the header read. */
+        const val DEFAULT_PREWARM_NEXT_EPISODE_TAIL_ENABLED: Boolean = false
 
         fun isBoundedTimeout(timeoutSeconds: Int): Boolean =
             timeoutSeconds > 0 && timeoutSeconds != STREAM_AUTOPLAY_TIMEOUT_UNLIMITED
@@ -1122,7 +1124,7 @@ class PlayerSettingsDataStore @Inject constructor(
                 prewarmNextEpisodeEnabled = prefs[prewarmNextEpisodeEnabledKey]
                     ?: PlayerSettings.DEFAULT_PREWARM_NEXT_EPISODE_ENABLED,
                 prewarmNextEpisodeTailEnabled = prefs[prewarmNextEpisodeTailEnabledKey]
-                    ?: PlayerSettings.DEFAULT_PREWARM_NEXT_EPISODE_ENABLED,
+                    ?: PlayerSettings.DEFAULT_PREWARM_NEXT_EPISODE_TAIL_ENABLED,
                 stillWatchingEnabled = prefs[stillWatchingEnabledKey] ?: false,
                 stillWatchingEpisodeThreshold = prefs[stillWatchingEpisodeThresholdKey]
                     ?.coerceIn(
