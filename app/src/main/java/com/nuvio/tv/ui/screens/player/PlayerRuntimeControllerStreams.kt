@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.sync.withLock
 
 /** Hard ceiling for next-episode stream search to prevent hanging forever. */
 private const val CLOUD_LIBRARY_AUTO_NEXT_TIMEOUT_MS = 65_000L
@@ -1966,7 +1967,9 @@ internal fun PlayerRuntimeController.playNextEpisode(userInitiated: Boolean = fa
             // A source prepared while this episode played skips the search (and its link is
             // resolved again when it may have expired).
             val preparedStream = prepared?.playableStream { stream ->
-                resolveDirectDebridStreamIfNeeded(stream, nextVideo.season, nextVideo.episode)
+                nextEpisodeDebridGate.withLock {
+                    resolveDirectDebridStreamIfNeeded(stream, nextVideo.season, nextVideo.episode)
+                }
             }
             val result = if (preparedStream != null) {
                 NextEpisodeSearchResult.Selected(stream = preparedStream, sourceStream = prepared?.sourceStream ?: preparedStream)

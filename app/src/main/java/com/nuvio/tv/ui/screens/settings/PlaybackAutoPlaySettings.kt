@@ -240,6 +240,13 @@ internal fun PlaybackUpNextSection(
                 },
                 onValueChange = { seconds -> onUpdate { setNextEpisodeCountdownSeconds(seconds) } }
             )
+
+            SettingsToggleRow(
+                title = stringResource(R.string.autoplay_prewarm_next_episode),
+                subtitle = stringResource(R.string.autoplay_prewarm_next_episode_sub),
+                checked = settings.prewarmNextEpisodeEnabled,
+                onToggle = { onUpdate { setPrewarmNextEpisodeEnabled(!settings.prewarmNextEpisodeEnabled) } }
+            )
         }
     }
 

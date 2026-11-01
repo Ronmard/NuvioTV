@@ -24,16 +24,23 @@ internal class PreparedNextEpisode(
     val stream: Stream,
     /** The selector's pick, kept for resolving an expired link again. */
     val sourceStream: Stream,
+    /** The link was opened ahead of time, null when it was not. */
+    val prewarm: NextEpisodePrewarmResult? = null,
     private val now: () -> Long = SystemClock::elapsedRealtime,
 ) {
     private val preparedAtMs = now()
 
     /**
-     * The prepared stream, resolved again from [sourceStream] once it may have expired; null when
-     * that fails (the run then searches as usual).
+     * The prepared stream (on the prewarmed link when the player can use it), resolved again from
+     * [sourceStream] once it may have expired; null when that fails (the run then searches as
+     * usual). A link resolved again has not been prewarmed, so it is used as is.
      */
     suspend fun playableStream(resolve: suspend (Stream) -> Stream?): Stream? =
-        if (now() - preparedAtMs < PREPARED_STREAM_MAX_AGE_MS) stream else resolve(sourceStream)
+        if (now() - preparedAtMs < PREPARED_STREAM_MAX_AGE_MS) {
+            stream.withPrewarmedUrl(prewarm?.usableFinalUrl)
+        } else {
+            resolve(sourceStream)
+        }
 }
 
 /** Where the "prepare at" trigger stands for the current episode. */
@@ -157,12 +164,16 @@ private fun PlayerRuntimeController.startNextEpisodePrepare() {
             background = true,
         )
         if (result is NextEpisodeSearchResult.Selected && state.episodeVideoId == episodeAtStart) {
+            // Opening the link now has the debrid service unlock the file before the switch.
+            val prewarm = if (prewarmNextEpisodeEnabledSetting) prewarmNextEpisodeStream(result.stream) else null
+            if (state.episodeVideoId != episodeAtStart) return@launch
             state.prepared = PreparedNextEpisode(
                 videoId = nextVideo.id,
                 season = nextVideo.season,
                 episode = nextVideo.episode,
                 stream = result.stream,
                 sourceStream = result.sourceStream,
+                prewarm = prewarm,
             )
         }
     }

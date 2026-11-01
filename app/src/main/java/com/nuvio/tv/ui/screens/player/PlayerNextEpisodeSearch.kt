@@ -13,6 +13,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.sync.withLock
 
 /** Upper bound on any wait for the next episode's sources, past the auto-play timeout included. */
 internal const val NEXT_EPISODE_HARD_TIMEOUT_MS = 120_000L
@@ -281,12 +282,14 @@ internal suspend fun PlayerRuntimeController.searchNextEpisodeStream(
 
     val picked = selectedStream
     val playable = picked?.let {
-        if (background) {
-            // A background search must not touch the current stream's loading diagnostics.
-            (directDebridResolver.resolveToPlayableStream(it, nextVideo.season, nextVideo.episode)
-                as? DirectDebridPlayableResult.Success)?.stream
-        } else {
-            resolveDirectDebridStreamIfNeeded(it, nextVideo.season, nextVideo.episode)
+        nextEpisodeDebridGate.withLock {
+            if (background) {
+                // A background search must not touch the current stream's loading diagnostics.
+                (directDebridResolver.resolveToPlayableStream(it, nextVideo.season, nextVideo.episode)
+                    as? DirectDebridPlayableResult.Success)?.stream
+            } else {
+                resolveDirectDebridStreamIfNeeded(it, nextVideo.season, nextVideo.episode)
+            }
         }
     }
     if (picked != null && playable != null) {
