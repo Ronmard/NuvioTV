@@ -9,7 +9,6 @@ import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.core.player.StreamAutoPlaySelector
 import com.nuvio.tv.data.local.PlayerSettings
 import com.nuvio.tv.data.local.StreamAutoPlayMode
-import com.nuvio.tv.data.local.StreamAutoPlaySource
 import com.nuvio.tv.data.local.toTrackPreference
 import com.nuvio.tv.domain.model.AddonStreams
 import com.nuvio.tv.domain.model.Stream
@@ -19,7 +18,6 @@ import com.nuvio.tv.domain.model.enabledAddons
 import com.nuvio.tv.ui.components.SourceChipItem
 import com.nuvio.tv.ui.components.SourceChipStatus
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -29,7 +27,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
 /** Hard ceiling for next-episode stream search to prevent hanging forever. */
-private const val NEXT_EPISODE_HARD_TIMEOUT_MS = 120_000L
 private const val CLOUD_LIBRARY_AUTO_NEXT_TIMEOUT_MS = 65_000L
 
 /**
@@ -1963,230 +1960,20 @@ internal fun PlayerRuntimeController.playNextEpisode(userInitiated: Boolean = fa
         try {
             streamRepository.setLocalPluginSearchPaused(false)
             val playerSettings = playerSettingsDataStore.playerSettings.first()
-            val shouldAutoSelectInManualMode =
-                playerSettings.streamAutoPlayMode == StreamAutoPlayMode.MANUAL &&
-                    (
-                        playerSettings.streamAutoPlayNextEpisodeEnabled ||
-                            playerSettings.streamAutoPlayPreferBingeGroupForNextEpisode
-                        )
-            val bingeGroupOnlyManualMode =
-                shouldAutoSelectInManualMode &&
-                    (!playerSettings.streamAutoPlayNextEpisodeEnabled ||
-                        !playerSettings.streamAutoPlayNextEpisodeFallbackEnabled) &&
-                    playerSettings.streamAutoPlayPreferBingeGroupForNextEpisode
-            if (playerSettings.streamAutoPlayMode == StreamAutoPlayMode.MANUAL && !shouldAutoSelectInManualMode) {
-                _uiState.update {
-                    it.copy(
-                        postPlayMode = null,
-                        postPlayDismissedForCurrentEpisode = true,
-                    )
-                }
-                showEpisodeStreamPicker(video = nextVideo, forceRefresh = true)
-                return@launch
-            }
-
-            val installedAddons = streamAddonsFor(nextVideo.id)
-            val installedAddonOrder = installedAddons.map { it.displayName }
-            val preferredServerNames = serverStreams.preferredSourceNames(type, nextVideo.id)
-            val effectiveMode = if (shouldAutoSelectInManualMode) {
-                StreamAutoPlayMode.FIRST_STREAM
-            } else {
-                playerSettings.streamAutoPlayMode
-            }
-            val effectiveSource = if (shouldAutoSelectInManualMode) {
-                StreamAutoPlaySource.ALL_SOURCES
-            } else {
-                playerSettings.streamAutoPlaySource
-            }
-            val effectiveSelectedAddons = if (shouldAutoSelectInManualMode) {
-                emptySet()
-            } else {
-                playerSettings.streamAutoPlaySelectedAddons
-            }
-            val effectiveSelectedPlugins = if (shouldAutoSelectInManualMode) {
-                emptySet()
-            } else {
-                playerSettings.streamAutoPlaySelectedPlugins
-            }
-            val effectiveRegex = if (shouldAutoSelectInManualMode) {
-                ""
-            } else {
-                playerSettings.streamAutoPlayRegex
-            }
-            var selectedStream: Stream? = null
-            var lastSuccessData: List<AddonStreams>? = null
-            var autoSelectTriggered = false
-            var timeoutElapsed = false
-            var lastError: NetworkResult.Error? = null
-            // Completed as soon as a stream is selected or the addon search
-            // finishes, so the waiting code below resumes without polling.
-            val searchSettled = CompletableDeferred<Unit>()
-
-            fun trySelectStream(data: List<AddonStreams>): Stream? {
-                val orderedStreams = StreamAutoPlaySelector.orderAddonStreams(data, installedAddonOrder, preferredServerNames)
-                val allStreams = orderedStreams.flatMap { it.streams }
-                return StreamAutoPlaySelector.selectAutoPlayStream(
-                    streams = allStreams,
-                    mode = effectiveMode,
-                    regexPattern = effectiveRegex,
-                    source = effectiveSource,
-                    installedAddonNames = installedAddonOrder.toSet(),
-                    selectedAddons = effectiveSelectedAddons,
-                    selectedPlugins = effectiveSelectedPlugins,
-                    preferredBingeGroup = if (playerSettings.streamAutoPlayPreferBingeGroupForNextEpisode) {
-                        currentStreamBingeGroup
-                    } else {
-                        null
-                    },
-                    preferBingeGroupInSelection = playerSettings.streamAutoPlayPreferBingeGroupForNextEpisode,
-                    bingeGroupOnly = bingeGroupOnlyManualMode
-                )
-            }
-
-            fun tryBingeGroupOnly(data: List<AddonStreams>): Stream? {
-                if (currentStreamBingeGroup == null || !playerSettings.streamAutoPlayPreferBingeGroupForNextEpisode) return null
-                val orderedStreams = StreamAutoPlaySelector.orderAddonStreams(data, installedAddonOrder, preferredServerNames)
-                val allStreams = orderedStreams.flatMap { it.streams }
-                // Early: binge group + filename match (most precise)
-                val nextFilename = com.nuvio.tv.core.player.FilenameEpisodeMatcher.buildNextFilename(
-                    filename = currentFilename.orEmpty(),
-                    currentSeason = _uiState.value.currentSeason,
-                    currentEpisode = _uiState.value.currentEpisode ?: 0,
-                    nextSeason = nextVideo.season,
-                    nextEpisode = nextVideo.episode ?: 0
-                ) ?: currentFilename?.takeIf { it.isNotBlank() }
-                if (nextFilename != null) {
-                    val bingeAndFilename = allStreams.firstOrNull { stream ->
-                        !stream.isExternal() &&
-                            stream.behaviorHints?.bingeGroup == currentStreamBingeGroup &&
-                            com.nuvio.tv.core.player.FilenameEpisodeMatcher.matches(
-                                stream.behaviorHints?.filename, nextFilename
-                            )
-                    }
-                    if (bingeAndFilename != null) return bingeAndFilename
-                }
-                // Early fallback: binge group alone
-                return StreamAutoPlaySelector.selectAutoPlayStream(
-                    streams = allStreams,
-                    mode = effectiveMode,
-                    regexPattern = effectiveRegex,
-                    source = effectiveSource,
-                    installedAddonNames = installedAddonOrder.toSet(),
-                    selectedAddons = effectiveSelectedAddons,
-                    selectedPlugins = effectiveSelectedPlugins,
-                    preferredBingeGroup = currentStreamBingeGroup,
-                    preferBingeGroupInSelection = true,
-                    bingeGroupOnly = true
-                )
-            }
-
-            fun tryFilenameOnly(data: List<AddonStreams>): Stream? {
-                val nextFilename = com.nuvio.tv.core.player.FilenameEpisodeMatcher.buildNextFilename(
-                    filename = currentFilename.orEmpty(),
-                    currentSeason = _uiState.value.currentSeason,
-                    currentEpisode = _uiState.value.currentEpisode ?: 0,
-                    nextSeason = nextVideo.season,
-                    nextEpisode = nextVideo.episode ?: 0
-                ) ?: currentFilename?.takeIf { it.isNotBlank() }
-                    ?: return null
-                val orderedStreams = StreamAutoPlaySelector.orderAddonStreams(data, installedAddonOrder, preferredServerNames)
-                return orderedStreams.flatMap { it.streams }.firstOrNull { stream ->
-                    !stream.isExternal() &&
-                        com.nuvio.tv.core.player.FilenameEpisodeMatcher.matches(
-                            stream.behaviorHints?.filename, nextFilename
-                        )
-                }
-            }
-
-            fun recordSelection(candidate: Stream) {
-                autoSelectTriggered = true
-                selectedStream = candidate
-                searchSettled.complete(Unit)
-            }
-
-            val timeoutSeconds = playerSettings.streamAutoPlayTimeoutSeconds
-
-            val innerJob = launch {
-                streamRepository.getStreamsFromAllAddons(
-                    type = type,
-                    videoId = nextVideo.id,
-                    season = nextVideo.season,
-                    episode = nextVideo.episode
-                ).collect { result ->
-                    when (result) {
-                        is NetworkResult.Success -> {
-                            lastSuccessData = result.data
-                            if (!autoSelectTriggered) {
-                                val candidate = when {
-                                    timeoutElapsed -> trySelectStream(result.data)
-                                    playerSettings.streamAutoPlayPreferBingeGroupForNextEpisode ->
-                                        tryBingeGroupOnly(result.data)
-                                    else -> null
-                                }
-                                if (candidate != null) recordSelection(candidate)
-                            }
-                        }
-                        is NetworkResult.Error -> lastError = result
-                        NetworkResult.Loading -> Unit
-                    }
-                }
-                // Every addon has responded: take whatever matched, then settle so
-                // the waiting code below resumes even if nothing was selected.
-                if (!autoSelectTriggered) {
-                    lastSuccessData?.let { data -> trySelectStream(data)?.let { recordSelection(it) } }
-                }
-                searchSettled.complete(Unit)
-            }
-
-            val timeoutMs = timeoutSeconds * 1_000L
-            if (PlayerSettings.isBoundedTimeout(timeoutSeconds)) {
-                // Wait for the timeout, resuming as soon as a stream is settled.
-                withTimeoutOrNull(timeoutMs) { searchSettled.await() }
-                timeoutElapsed = true
-                if (!autoSelectTriggered) {
-                    // Filename match before full select — same release, any binge group.
-                    lastSuccessData?.let { tryFilenameOnly(it)?.let { s -> recordSelection(s) } }
-                }
-                if (!autoSelectTriggered) {
-                    val data = lastSuccessData
-                    if (data != null) {
-                        trySelectStream(data)?.let { recordSelection(it) }
-                    } else {
-                        withTimeoutOrNull(timeoutMs) { searchSettled.await() }
-                        if (!autoSelectTriggered) {
-                            lastSuccessData?.let { tryFilenameOnly(it)?.let { s -> recordSelection(s) } }
-                        }
-                        if (!autoSelectTriggered) {
-                            lastSuccessData?.let { trySelectStream(it)?.let { s -> recordSelection(s) } }
-                        }
-                    }
-                }
-                innerJob.cancel()
-            } else if (timeoutSeconds == 0) {
-                timeoutElapsed = true
-                withTimeoutOrNull(NEXT_EPISODE_HARD_TIMEOUT_MS) { searchSettled.await() }
-                if (!autoSelectTriggered) {
-                    lastSuccessData?.let { tryFilenameOnly(it)?.let { s -> recordSelection(s) } }
-                }
-                if (!autoSelectTriggered) {
-                    lastSuccessData?.let { data -> trySelectStream(data)?.let { recordSelection(it) } }
-                }
-                innerJob.cancel()
-            } else {
-                withTimeoutOrNull(NEXT_EPISODE_HARD_TIMEOUT_MS) { searchSettled.await() }
-                if (!autoSelectTriggered) {
-                    lastSuccessData?.let { tryFilenameOnly(it)?.let { s -> recordSelection(s) } }
-                }
-                if (!autoSelectTriggered) {
-                    lastSuccessData?.let { data -> trySelectStream(data)?.let { recordSelection(it) } }
-                }
-                innerJob.cancel()
-            }
-
-            val streamToPlay = selectedStream?.let {
-                resolveDirectDebridStreamIfNeeded(it, nextVideo.season, nextVideo.episode)
-            }
-            if (streamToPlay != null) {
+            val videoIdAtStart = currentVideoId
+            val result = searchNextEpisodeStream(
+                nextVideo = nextVideo,
+                type = type,
+                playerSettings = playerSettings,
+                // Addons still answering and this episode still playing: wait for them instead of
+                // opening the picker at the auto-play timeout. The wait ends when the episode ends.
+                keepWaitingAfterTimeout = {
+                    currentVideoId == videoIdAtStart && !_uiState.value.playbackEnded
+                },
+                background = false,
+            )
+            if (result is NextEpisodeSearchResult.Selected) {
+                val streamToPlay = result.stream
                 val sourceName = (streamToPlay.name?.takeIf { it.isNotBlank() } ?: streamToPlay.addonName).trim()
                 for (remaining in 3 downTo 1) {
                     _uiState.update { current ->
@@ -2223,7 +2010,7 @@ internal fun PlayerRuntimeController.playNextEpisode(userInitiated: Boolean = fa
                 }
                 showEpisodeStreamPicker(
                     video = nextVideo,
-                    forceRefresh = lastError != null || selectedStream != null
+                    forceRefresh = (result as NextEpisodeSearchResult.NoSelection).forceRefresh
                 )
             }
         } catch (e: CancellationException) {
