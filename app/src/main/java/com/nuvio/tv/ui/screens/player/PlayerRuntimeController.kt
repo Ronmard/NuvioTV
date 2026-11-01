@@ -456,6 +456,8 @@ class PlayerRuntimeController(
     /** Cancels previous TEXT-track bounce jobs when subtitle delay is adjusted repeatedly. */
     internal var subtitleTimingRefreshJob: Job? = null
     internal var nextEpisodeAutoPlayJob: Job? = null
+    /** The next-episode run started on its own at the outro or the end; a seek back before that point cancels it. */
+    internal var automaticNextEpisodeRun: Job? = null
     internal var debridResolveJob: Job? = null
     internal var stillWatchingPromptJob: Job? = null
     internal var startupLoadingReportJob: Job? = null

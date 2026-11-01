@@ -1,5 +1,6 @@
 package com.nuvio.tv.ui.screens.player
 
+import android.util.Log
 import com.nuvio.tv.R
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.data.local.AutoSkipSegmentType
@@ -383,7 +384,14 @@ internal fun PlayerRuntimeController.evaluatePostPlayOverlayVisibility(positionM
         }
         return
     }
-    if (state.postPlayMode != null || state.postPlayDismissedForCurrentEpisode) return
+    if (state.postPlayDismissedForCurrentEpisode) return
+    val shownMode = state.postPlayMode
+    if (shownMode != null) {
+        if (shownMode is PostPlayMode.AutoPlay) {
+            updateShownNextEpisodeCard(shownMode, positionMs, effectiveDurationEarly)
+        }
+        return
+    }
 
     val effectiveDuration = effectiveDurationEarly
 
@@ -435,13 +443,88 @@ internal fun PlayerRuntimeController.evaluatePostPlayOverlayVisibility(positionM
             (ne.released.isNullOrBlank() && ne.available == false)
         if (isUnplayable) return
 
+        // The card shows at its threshold; the next episode only starts on its own at the
+        // outro or the end (see updateShownNextEpisodeCard).
         _uiState.update {
             it.copy(postPlayMode = PostPlayMode.AutoPlay(nextEpisode = state.nextEpisode))
         }
-        if (streamAutoPlayNextEpisodeEnabledSetting) {
-            playNextEpisode()
+        if (streamAutoPlayNextEpisodeEnabledSetting &&
+            PlayerNextEpisodeRules.isNextEpisodeAutoStartPoint(
+                positionMs = positionMs,
+                durationMs = effectiveDuration,
+                skipIntervals = skipIntervals,
+                thresholdMode = nextEpisodeThresholdModeSetting,
+                thresholdPercent = nextEpisodeThresholdPercentSetting,
+                thresholdMinutesBeforeEnd = nextEpisodeThresholdMinutesBeforeEndSetting
+            )
+        ) {
+            startAutomaticNextEpisodeRun()
         }
     }
+}
+
+/**
+ * Follows playback while the next-episode card is shown: starts the run on its own once playback
+ * reaches the outro or the end, cancels a run it started there when playback seeks back before
+ * that point, and hides an idle card when playback seeks back before the card's threshold.
+ */
+private fun PlayerRuntimeController.updateShownNextEpisodeCard(
+    mode: PostPlayMode.AutoPlay,
+    positionMs: Long,
+    durationMs: Long,
+) {
+    val atAutoStart = PlayerNextEpisodeRules.isNextEpisodeAutoStartPoint(
+        positionMs = positionMs,
+        durationMs = durationMs,
+        skipIntervals = skipIntervals,
+        thresholdMode = nextEpisodeThresholdModeSetting,
+        thresholdPercent = nextEpisodeThresholdPercentSetting,
+        thresholdMinutesBeforeEnd = nextEpisodeThresholdMinutesBeforeEndSetting
+    )
+    val cardShown = PlayerNextEpisodeRules.shouldShowNextEpisodeCard(
+        positionMs = positionMs,
+        durationMs = durationMs,
+        skipIntervals = skipIntervals,
+        thresholdMode = nextEpisodeThresholdModeSetting,
+        thresholdPercent = nextEpisodeThresholdPercentSetting,
+        thresholdMinutesBeforeEnd = nextEpisodeThresholdMinutesBeforeEndSetting
+    )
+    val run = nextEpisodeAutoPlayJob
+    if (run?.isActive == true) {
+        if (run === automaticNextEpisodeRun && !atAutoStart) {
+            Log.d(
+                PlayerRuntimeController.TAG,
+                "Next episode: seek back before the outro/end (pos=$positionMs), cancelling the automatic run"
+            )
+            run.cancel()
+            nextEpisodeAutoPlayJob = null
+            automaticNextEpisodeRun = null
+            _uiState.update {
+                it.copy(
+                    postPlayMode = if (cardShown) {
+                        PostPlayMode.AutoPlay(nextEpisode = it.nextEpisode ?: mode.nextEpisode)
+                    } else {
+                        null
+                    }
+                )
+            }
+        }
+        return
+    }
+    if (mode.searching || mode.countdownSec != null) return
+    if (!cardShown) {
+        _uiState.update { if (it.postPlayMode === mode) it.copy(postPlayMode = null) else it }
+        return
+    }
+    if (atAutoStart && streamAutoPlayNextEpisodeEnabledSetting) {
+        startAutomaticNextEpisodeRun()
+    }
+}
+
+/** Starts the next episode on its own (not from a Next press), so a seek back can cancel it. */
+internal fun PlayerRuntimeController.startAutomaticNextEpisodeRun() {
+    playNextEpisode()
+    automaticNextEpisodeRun = nextEpisodeAutoPlayJob?.takeIf { it.isActive }
 }
 
 internal fun PlayerRuntimeController.showStreamSourceIndicator(stream: Stream) {

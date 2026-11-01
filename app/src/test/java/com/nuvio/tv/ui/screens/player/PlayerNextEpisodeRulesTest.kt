@@ -218,4 +218,65 @@ class PlayerNextEpisodeRulesTest {
     fun `an unknown duration is not away from the end`() {
         assertFalse(awayFromEnd(positionMs = 0L, durationMs = 0L))
     }
+
+    private fun autoStart(
+        positionSec: Double,
+        durationSec: Double = 2_700.0,
+        skipIntervals: List<SkipInterval> = emptyList(),
+    ) = PlayerNextEpisodeRules.isNextEpisodeAutoStartPoint(
+        positionMs = (positionSec * 1_000).toLong(),
+        durationMs = (durationSec * 1_000).toLong(),
+        skipIntervals = skipIntervals,
+        thresholdMode = NextEpisodeThresholdMode.PERCENTAGE,
+        thresholdPercent = 97f,
+        thresholdMinutesBeforeEnd = 2f
+    )
+
+    @Test
+    fun `without outro data the card shows at its threshold but the run waits for the end`() {
+        assertTrue(shouldShow(positionMs = 2_640_000L, durationMs = 2_700_000L))
+        assertFalse(autoStart(positionSec = 2_640.0))
+        assertFalse(autoStart(positionSec = 2_698.0))
+        assertTrue(autoStart(positionSec = 2_699.5))
+        assertTrue(autoStart(positionSec = 2_700.0))
+    }
+
+    @Test
+    fun `an outro that runs to the end starts the run at the outro`() {
+        val segments = listOf(outro(2_580.0, 2_697.0))
+        assertFalse(autoStart(positionSec = 2_579.0, skipIntervals = segments))
+        assertTrue(autoStart(positionSec = 2_580.0, skipIntervals = segments))
+        assertTrue(autoStart(positionSec = 2_650.0, skipIntervals = segments))
+    }
+
+    @Test
+    fun `a seek back before the outro is no longer an auto start point`() {
+        val segments = listOf(outro(2_580.0, 2_697.0))
+        assertTrue(autoStart(positionSec = 2_600.0, skipIntervals = segments))
+        assertFalse(autoStart(positionSec = 1_000.0, skipIntervals = segments))
+    }
+
+    @Test
+    fun `a post-credits scene holds the run until the scene ends`() {
+        val segments = listOf(
+            outro(2_400.0, 2_500.0),
+            SkipInterval(startTime = 2_510.0, endTime = 2_650.0, type = "post-credits", provider = "introdb"),
+        )
+        assertFalse(autoStart(positionSec = 2_450.0, skipIntervals = segments))
+        assertFalse(autoStart(positionSec = 2_600.0, skipIntervals = segments))
+        assertTrue(autoStart(positionSec = 2_650.0, skipIntervals = segments))
+    }
+
+    @Test
+    fun `a short scene after the outro leaves the run to the end`() {
+        val segments = listOf(outro(2_580.0, 2_680.0))
+        assertFalse(autoStart(positionSec = 2_600.0, skipIntervals = segments))
+        assertFalse(autoStart(positionSec = 2_690.0, skipIntervals = segments))
+        assertTrue(autoStart(positionSec = 2_699.5, skipIntervals = segments))
+    }
+
+    @Test
+    fun `an unknown duration is never an auto start point`() {
+        assertFalse(autoStart(positionSec = 100.0, durationSec = 0.0))
+    }
 }

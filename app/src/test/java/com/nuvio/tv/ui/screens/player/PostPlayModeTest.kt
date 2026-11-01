@@ -88,4 +88,12 @@ class PostPlayModeTest {
     fun `blocksNaturalCompletion is false for passive AutoPlay card`() {
         assertFalse(PostPlayMode.AutoPlay(nextEpisode = episodeA).blocksNaturalCompletion())
     }
+
+    @Test
+    fun `an idle next-episode card at natural end lets the end start the run`() {
+        // The card shows at its threshold without a run; the run starts at the outro or the end.
+        val idleCard = PlayerUiState(postPlayMode = PostPlayMode.AutoPlay(nextEpisode = episodeA))
+        assertTrue(shouldResetPostPlayStateAfterPlaybackEnded(idleCard, hasInFlightNextEpisodeAutoPlay = false))
+        assertFalse(shouldResetPostPlayStateAfterPlaybackEnded(idleCard, hasInFlightNextEpisodeAutoPlay = true))
+    }
 }

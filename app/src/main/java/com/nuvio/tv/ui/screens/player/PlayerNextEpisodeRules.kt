@@ -125,6 +125,37 @@ object PlayerNextEpisodeRules {
         }
     }
 
+    /**
+     * Whether the next episode may start on its own at [positionMs]: at the end of the episode, or
+     * from the earliest outro segment's start on where the card rule agrees (the card rule holds
+     * back over a post-credits scene). Without outro data only the end qualifies, so the card's
+     * threshold just shows the card, for a manual Next.
+     */
+    fun isNextEpisodeAutoStartPoint(
+        positionMs: Long,
+        durationMs: Long,
+        skipIntervals: List<SkipInterval>,
+        thresholdMode: NextEpisodeThresholdMode,
+        thresholdPercent: Float,
+        thresholdMinutesBeforeEnd: Float
+    ): Boolean {
+        if (durationMs <= 0L) return false
+        if (positionMs >= durationMs - END_AUTO_START_WINDOW_MS) return true
+        val outroStartMs = skipIntervals
+            .filter { it.type in OUTRO_SEGMENT_TYPES }
+            .minOfOrNull { (it.startTime * 1_000.0).toLong() }
+            ?: return false
+        return positionMs >= outroStartMs &&
+            shouldShowNextEpisodeCard(
+                positionMs = positionMs,
+                durationMs = durationMs,
+                skipIntervals = skipIntervals,
+                thresholdMode = thresholdMode,
+                thresholdPercent = thresholdPercent,
+                thresholdMinutesBeforeEnd = thresholdMinutesBeforeEnd
+            )
+    }
+
     /** True when a reading is clearly before the end and outside the next-episode window. */
     fun isAwayFromEnd(
         positionMs: Long,
@@ -158,6 +189,9 @@ object PlayerNextEpisodeRules {
     const val POST_OUTRO_AUTOPLAY_GAP_MS = 5_000L
 
     const val END_OF_VIDEO_EPSILON_MS = 1_000L
+
+    /** How close to the duration counts as the end for starting the next episode on its own. */
+    const val END_AUTO_START_WINDOW_MS = 1_000L
 
     /** How close to the duration MPV treats as the end of the file. */
     const val NEAR_END_MS = 500L
