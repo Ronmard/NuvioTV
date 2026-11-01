@@ -309,6 +309,7 @@ data class PlayerSettings(
     val pauseOverlayEnabled: Boolean = true,
     val osdClockEnabled: Boolean = true,
     val skipIntroEnabled: Boolean = true,
+    val seekBarSegmentMarkersEnabled: Boolean = true,
     val parentalGuideEnabled: Boolean = true,
     val autoSkipSegmentTypes: Set<AutoSkipSegmentType> = emptySet(),
     // Dolby Vision settings (libdovi conversion). dv7HandlingMode == HDR10_BASE_LAYER
@@ -634,6 +635,7 @@ class PlayerSettingsDataStore @Inject constructor(
     private val pauseOverlayEnabledKey = booleanPreferencesKey("pause_overlay_enabled")
     private val osdClockEnabledKey = booleanPreferencesKey("osd_clock_enabled")
     private val skipIntroEnabledKey = booleanPreferencesKey("skip_intro_enabled")
+    private val seekBarSegmentMarkersEnabledKey = booleanPreferencesKey("seek_bar_segment_markers_enabled")
     private val parentalGuideEnabledKey = booleanPreferencesKey("parental_guide_enabled")
     private val autoSkipSegmentTypesKey = stringSetPreferencesKey("auto_skip_segment_types")
 
@@ -1028,6 +1030,7 @@ class PlayerSettingsDataStore @Inject constructor(
                 pauseOverlayEnabled = prefs[pauseOverlayEnabledKey] ?: true,
                 osdClockEnabled = prefs[osdClockEnabledKey] ?: true,
                 skipIntroEnabled = prefs[skipIntroEnabledKey] ?: true,
+                seekBarSegmentMarkersEnabled = prefs[seekBarSegmentMarkersEnabledKey] ?: true,
                 parentalGuideEnabled = prefs[parentalGuideEnabledKey] ?: true,
                 autoSkipSegmentTypes = prefs[autoSkipSegmentTypesKey]
                     ?.mapNotNull(AutoSkipSegmentType::fromStoredValue)
@@ -1341,6 +1344,12 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setOsdClockEnabled(enabled: Boolean) {
         store().edit { prefs ->
             prefs[osdClockEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setSeekBarSegmentMarkersEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[seekBarSegmentMarkersEnabledKey] = enabled
         }
     }
 

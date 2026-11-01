@@ -197,6 +197,9 @@ data class PlayerUiState(
     val activeSkipInterval: SkipInterval? = null,
     val activeSkipTargetsPostCredits: Boolean = false,
     val skipIntervalDismissed: Boolean = false,
+    /** The episode's merged skip segments, for the seek bar's bands. */
+    val timelineSkipIntervals: List<SkipInterval> = emptyList(),
+    val showSeekBarSegments: Boolean = true,
     // Next episode card
     val nextEpisode: NextEpisodeInfo? = null,
     val isNextEpisodeMetadataResolved: Boolean = false,

@@ -530,6 +530,11 @@ class PlayerRuntimeController(
     internal var backgroundCrashSavedPositionMs: Long = 0L
 
     internal var skipIntervals: List<SkipInterval> = emptyList()
+        set(value) {
+            field = value
+            // The seek bar marks the same segments the skip button and next-episode rules use.
+            _uiState.update { it.copy(timelineSkipIntervals = value) }
+        }
     internal var chapterSkipIntervals: List<SkipInterval> = emptyList()
     internal var apiSkipIntervals: List<SkipInterval> = emptyList()
     internal var skipDetectionChapters: List<PlayerChapter> = emptyList()

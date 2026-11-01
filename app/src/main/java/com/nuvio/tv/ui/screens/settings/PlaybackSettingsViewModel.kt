@@ -181,6 +181,10 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setOsdClockEnabled(enabled)
     }
 
+    suspend fun setSeekBarSegmentMarkersEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setSeekBarSegmentMarkersEnabled(enabled)
+    }
+
     suspend fun setTransparentLetterbox(enabled: Boolean) {
         deviceLocalPlayerPreferences.setTransparentLetterbox(enabled)
     }

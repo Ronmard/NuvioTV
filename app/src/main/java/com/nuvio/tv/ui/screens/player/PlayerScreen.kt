@@ -5,6 +5,7 @@
 
 package com.nuvio.tv.ui.screens.player
 
+import com.nuvio.tv.data.repository.SkipInterval
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.ui.layout.boundsInWindow
 import android.graphics.RectF
@@ -1800,7 +1801,11 @@ fun PlayerScreen(
                 .reportSubtitleClearance(subtitleClearanceGapPx) { seekClearancePx = it }
                 .then(playerControlsDim)
         ) {
-            SeekOverlayHost(viewModel = viewModel, chapters = uiState.chapters)
+            SeekOverlayHost(
+                viewModel = viewModel,
+                chapters = uiState.chapters,
+                skipIntervals = uiState.seekBarSkipIntervals()
+            )
         }
 
         // Chapters side panel (slides in from right, over a scrim)
@@ -2956,6 +2961,7 @@ private fun PlayerControlsOverlay(
                         PlayerControlsProgressBarHost(
                             viewModel = viewModel,
                             chapters = uiState.chapters,
+                            skipIntervals = uiState.seekBarSkipIntervals(),
                             focusRequester = progressBarFocusRequester,
                             upFocusRequester = progressBarUpFocusRequester,
                             downFocusRequester = playPauseFocusRequester,
@@ -3205,6 +3211,7 @@ private fun PlayerControlsOverlay(
 private fun PlayerControlsProgressBarHost(
     viewModel: PlayerViewModel,
     chapters: List<PlayerChapter>,
+    skipIntervals: List<SkipInterval>,
     focusRequester: FocusRequester,
     upFocusRequester: FocusRequester? = null,
     downFocusRequester: FocusRequester? = null,
@@ -3215,8 +3222,12 @@ private fun PlayerControlsProgressBarHost(
     val playbackTimeline by viewModel.playbackTimeline.collectAsState()
 
     ChapterTitle(chapters = chapters, positionMs = playbackTimeline.currentPosition)
+    val segments = remember(skipIntervals, playbackTimeline.duration) {
+        skipIntervals.timelineSegments(playbackTimeline.duration)
+    }
     ProgressBar(
         chapters = chapters,
+        segments = segments,
         currentPosition = playbackTimeline.currentPosition,
         duration = playbackTimeline.duration,
         onSeekPreview = { delta ->
@@ -3387,9 +3398,12 @@ private fun ProgressBar(
     /** Position (ms) up to which content is buffered. Pass 0 to skip the overlay. */
     bufferedPosition: Long = 0L,
     /** Each chapter after the first gets a mark where it starts. */
-    chapters: List<PlayerChapter> = emptyList()
+    chapters: List<PlayerChapter> = emptyList(),
+    /** Skip segments (intro, recap, credits, post-credits) drawn as bands under the fill. */
+    segments: List<PlayerTimelineSegment> = emptyList()
 ) {
     val accentBrush = NuvioTheme.palette.accentBrush()
+    val segmentColors = rememberPlayerTimelineSegmentColors()
     val seekBarLabel = stringResource(R.string.cd_seek_bar)
     val progress = if (duration > 0) {
         (currentPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f)
@@ -3529,6 +3543,14 @@ private fun ProgressBar(
                     if (isFocused) Color.White.copy(alpha = 0.45f)
                     else Color.White.copy(alpha = 0.3f)
                 )
+                // Skip segment bands, under the fill: the played part stays the plain fill.
+                .drawBehind {
+                    drawTimelineSegments(
+                        segments = segments,
+                        colors = segmentColors,
+                        positionFraction = progress
+                    )
+                }
                 .playerProgressFill(
                     progress = { animatedProgress },
                     bufferedProgress = { animatedBufferedProgress },
@@ -3574,7 +3596,8 @@ private fun SeekOverlay(
     currentPosition: Long,
     duration: Long,
     bufferedPosition: Long = 0L,
-    chapters: List<PlayerChapter> = emptyList()
+    chapters: List<PlayerChapter> = emptyList(),
+    segments: List<PlayerTimelineSegment> = emptyList()
 ) {
     Column(
         modifier = Modifier
@@ -3589,7 +3612,8 @@ private fun SeekOverlay(
                 onSeekPreview = {},
                 onSeekCommit = {},
                 bufferedPosition = bufferedPosition,
-                chapters = chapters
+                chapters = chapters,
+                segments = segments
             )
 
             Spacer(modifier = Modifier.height(NuvioTheme.spacing.md))
@@ -3610,14 +3634,22 @@ private fun SeekOverlay(
 }
 
 @Composable
-private fun SeekOverlayHost(viewModel: PlayerViewModel, chapters: List<PlayerChapter>) {
+private fun SeekOverlayHost(
+    viewModel: PlayerViewModel,
+    chapters: List<PlayerChapter>,
+    skipIntervals: List<SkipInterval>
+) {
     val playbackTimeline by viewModel.playbackTimeline.collectAsState()
+    val segments = remember(skipIntervals, playbackTimeline.duration) {
+        skipIntervals.timelineSegments(playbackTimeline.duration)
+    }
 
     SeekOverlay(
         currentPosition = playbackTimeline.currentPosition,
         duration = playbackTimeline.duration,
         bufferedPosition = playbackTimeline.bufferedPosition,
-        chapters = chapters
+        chapters = chapters,
+        segments = segments
     )
 }
 
@@ -4559,3 +4591,7 @@ private fun PlayerBufferingIndicator(
         }
     }
 }
+
+/** The skip segments to mark on the seek bar, or none when that setting is off. */
+private fun PlayerUiState.seekBarSkipIntervals(): List<SkipInterval> =
+    if (showSeekBarSegments) timelineSkipIntervals else emptyList()

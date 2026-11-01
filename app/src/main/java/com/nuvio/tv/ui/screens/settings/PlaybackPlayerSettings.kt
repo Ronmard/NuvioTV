@@ -71,6 +71,14 @@ internal fun PlaybackSkipSegmentsSection(
         enabled = internalPlayer
     )
 
+    SettingsToggleRow(
+        title = stringResource(R.string.playback_seek_bar_segment_markers),
+        subtitle = stringResource(R.string.playback_seek_bar_segment_markers_sub),
+        checked = settings.seekBarSegmentMarkersEnabled,
+        onToggle = { onUpdate { setSeekBarSegmentMarkersEnabled(!settings.seekBarSegmentMarkersEnabled) } },
+        enabled = autoSkipEnabled
+    )
+
     SettingsSectionLabel(
         text = stringResource(R.string.playback_auto_skip_segments),
         description = stringResource(R.string.playback_auto_skip_segments_sub)
