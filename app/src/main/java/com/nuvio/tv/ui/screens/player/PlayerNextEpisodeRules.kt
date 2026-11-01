@@ -196,6 +196,22 @@ object PlayerNextEpisodeRules {
     }
 
     /**
+     * Whether skipping an outro should start the next episode instead of jumping: the skip lands
+     * within [OUTRO_SKIP_TO_NEXT_EPISODE_WINDOW_MS] of [autoStartMs] (or past it), so the jump and
+     * its rebuffer would only lead to the switch a moment later. A skip to a post-credits scene
+     * keeps its jump; so does one that leaves more than the window to watch (a preview, say).
+     */
+    fun outroSkipStartsNextEpisode(
+        intervalType: String,
+        skipTargetMs: Long,
+        autoStartMs: Long?,
+        targetsPostCredits: Boolean,
+    ): Boolean {
+        if (intervalType !in OUTRO_SEGMENT_TYPES || targetsPostCredits || autoStartMs == null) return false
+        return skipTargetMs >= autoStartMs - OUTRO_SKIP_TO_NEXT_EPISODE_WINDOW_MS
+    }
+
+    /**
      * The countdown on the card before a prepared next episode starts: [totalMs] long, ending at
      * [autoStartMs]. Null outside that window, or when the countdown is off.
      */
@@ -242,6 +258,9 @@ object PlayerNextEpisodeRules {
 
     /** How close to the duration counts as the end for starting the next episode on its own. */
     const val END_AUTO_START_WINDOW_MS = 1_000L
+
+    /** An outro skip landing this close before the auto-start point starts the next episode. */
+    const val OUTRO_SKIP_TO_NEXT_EPISODE_WINDOW_MS = 10_000L
 
     /** Precision of the auto-start position search; finer than one position update. */
     const val AUTO_START_SEARCH_PRECISION_MS = 100L

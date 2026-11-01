@@ -627,7 +627,7 @@ internal fun PlayerRuntimeController.updateActiveSkipInterval(positionMs: Long) 
             !isPartyControlLocked
         ) {
             autoSkippedIntervalKeys.add(activeKey)
-            skipInterval(active)
+            skipInterval(active, userInitiated = false)
         }
     } else if (currentActive != null) {
         // When the same segment type exists just ahead (within 2s), swap to keep the button

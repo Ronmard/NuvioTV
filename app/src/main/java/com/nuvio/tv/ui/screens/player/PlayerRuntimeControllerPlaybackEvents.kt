@@ -201,10 +201,14 @@ internal fun PlayerRuntimeController.mpvSubtitleDelayMs(userDelayMs: Int): Int =
     userDelayMs + (streamSubtitleDelayUs.get() / 1000L).toInt()
 
 internal fun PlayerRuntimeController.skipActiveInterval(): Boolean {
-    return skipInterval(_uiState.value.activeSkipInterval ?: return false)
+    return skipInterval(_uiState.value.activeSkipInterval ?: return false, userInitiated = true)
 }
 
-internal fun PlayerRuntimeController.skipInterval(interval: SkipInterval): Boolean {
+/**
+ * Skips [interval]: [userInitiated] for the Skip button, false for an automatic skip. An outro skip
+ * that would land just before the next episode starts on its own starts it instead.
+ */
+internal fun PlayerRuntimeController.skipInterval(interval: SkipInterval, userInitiated: Boolean): Boolean {
     if (interval.type == "post-credits") return false
     val duration = currentPlaybackDurationMs().takeIf { it > 0 } ?: Long.MAX_VALUE
     val postCredits = interval.followingPostCreditsScene(skipIntervals, currentPlaybackDurationMs())
@@ -213,6 +217,9 @@ internal fun PlayerRuntimeController.skipInterval(interval: SkipInterval): Boole
         duration
     } else {
         (targetTime * 1000).toLong()
+    }
+    if (skipOutroIntoNextEpisode(interval, seekMs.coerceAtMost(duration), postCredits != null, userInitiated)) {
+        return true
     }
     val seekParameters = if (postCredits != null || interval.type == "movie-credits") {
         SeekParameters.EXACT
@@ -223,6 +230,38 @@ internal fun PlayerRuntimeController.skipInterval(interval: SkipInterval): Boole
     scheduleProgressSyncAfterSeek()
     publishPartyPlayback(positionMs = target)
     _uiState.update { it.copy(activeSkipInterval = null, skipIntervalDismissed = true) }
+    return true
+}
+
+/**
+ * Starts the next episode in place of an outro skip when auto-play next is on and the skip would
+ * land within [PlayerNextEpisodeRules.OUTRO_SKIP_TO_NEXT_EPISODE_WINDOW_MS] of the auto-start point.
+ * The run is not tied to the playback position (the position is still before the auto-start point),
+ * so the usual seek-back cancel does not apply to it; Back on the card still does.
+ */
+private fun PlayerRuntimeController.skipOutroIntoNextEpisode(
+    interval: SkipInterval,
+    skipTargetMs: Long,
+    targetsPostCredits: Boolean,
+    userInitiated: Boolean,
+): Boolean {
+    if (!streamAutoPlayNextEpisodeEnabledSetting || isPartyControlLocked) return false
+    val next = _uiState.value.nextEpisode?.takeIf { it.hasAired } ?: return false
+    if (nextEpisodeVideo?.id != next.videoId) return false
+    val autoStartMs = PlayerNextEpisodeRules.nextEpisodeAutoStartPositionMs(
+        durationMs = currentPlaybackDurationMs(),
+        skipIntervals = skipIntervals,
+        thresholdMode = nextEpisodeThresholdModeSetting,
+        thresholdPercent = nextEpisodeThresholdPercentSetting,
+        thresholdMinutesBeforeEnd = nextEpisodeThresholdMinutesBeforeEndSetting
+    )
+    if (!PlayerNextEpisodeRules.outroSkipStartsNextEpisode(interval.type, skipTargetMs, autoStartMs, targetsPostCredits)) {
+        return false
+    }
+    _uiState.update { it.copy(activeSkipInterval = null, skipIntervalDismissed = true) }
+    if (nextEpisodeAutoPlayJob?.isActive != true) {
+        playNextEpisode(userInitiated = userInitiated)
+    }
     return true
 }
 

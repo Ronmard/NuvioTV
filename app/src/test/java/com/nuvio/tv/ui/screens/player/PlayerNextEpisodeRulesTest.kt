@@ -343,4 +343,52 @@ class PlayerNextEpisodeRulesTest {
     fun `the lead countdown is off at zero seconds`() {
         assertNull(PlayerNextEpisodeRules.leadCountdown(97_000L, 100_000L, 0L))
     }
+
+    // ---- outro skip into the next episode ----
+
+    private fun skipToNext(type: String = "outro", target: Long, autoStart: Long?, postCredits: Boolean = false) =
+        PlayerNextEpisodeRules.outroSkipStartsNextEpisode(type, target, autoStart, postCredits)
+
+    @Test
+    fun `an outro skip landing just before the auto-start point starts the next episode`() {
+        // The Attack on Titan case: the outro ends at 1434 s, the switch is at 99% (1436.5 s).
+        assertTrue(skipToNext(target = 1_434_950L, autoStart = 1_436_500L))
+    }
+
+    @Test
+    fun `the window is 10 s, inclusive`() {
+        assertEquals(10_000L, PlayerNextEpisodeRules.OUTRO_SKIP_TO_NEXT_EPISODE_WINDOW_MS)
+        assertTrue(skipToNext(target = 90_000L, autoStart = 100_000L))
+        assertFalse(skipToNext(target = 89_999L, autoStart = 100_000L))
+    }
+
+    @Test
+    fun `a skip landing at or past the auto-start point starts the next episode`() {
+        assertTrue(skipToNext(target = 100_000L, autoStart = 100_000L))
+        assertTrue(skipToNext(target = 120_000L, autoStart = 100_000L))
+    }
+
+    @Test
+    fun `a skip that leaves more than 10 s to watch keeps its jump`() {
+        // A 30 s preview after the outro, kept by the card rule.
+        assertFalse(skipToNext(target = 1_400_000L, autoStart = 1_430_000L))
+    }
+
+    @Test
+    fun `every outro type counts, other segments do not`() {
+        for (type in listOf("outro", "ed", "mixed-ed")) assertTrue(type, skipToNext(type, 99_000L, 100_000L))
+        for (type in listOf("intro", "op", "recap", "credits", "post-credits")) {
+            assertFalse(type, skipToNext(type, 99_000L, 100_000L))
+        }
+    }
+
+    @Test
+    fun `a skip to a post-credits scene keeps its jump`() {
+        assertFalse(skipToNext(target = 99_000L, autoStart = 100_000L, postCredits = true))
+    }
+
+    @Test
+    fun `an unknown auto-start point keeps the jump`() {
+        assertFalse(skipToNext(target = 99_000L, autoStart = null))
+    }
 }
