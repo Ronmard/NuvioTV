@@ -346,8 +346,8 @@ class PlayerNextEpisodeRulesTest {
 
     // ---- outro skip into the next episode ----
 
-    private fun skipToNext(type: String = "outro", target: Long, autoStart: Long?, postCredits: Boolean = false) =
-        PlayerNextEpisodeRules.outroSkipStartsNextEpisode(type, target, autoStart, postCredits)
+    private fun skipToNext(type: String = "outro", target: Long, autoStart: Long?) =
+        PlayerNextEpisodeRules.outroSkipStartsNextEpisode(type, target, autoStart)
 
     @Test
     fun `an outro skip landing just before the auto-start point starts the next episode`() {
@@ -383,8 +383,16 @@ class PlayerNextEpisodeRulesTest {
     }
 
     @Test
-    fun `a skip to a post-credits scene keeps its jump`() {
-        assertFalse(skipToNext(target = 99_000L, autoStart = 100_000L, postCredits = true))
+    fun `a short preview after the outro does not keep the jump`() {
+        // Attack on Titan: an 18 s preview after the outro (a post-credits scene to the skip
+        // heuristic), but the switch is 3.4 s into it.
+        assertTrue(skipToNext(target = 1_431_000L, autoStart = 1_434_431L))
+    }
+
+    @Test
+    fun `a post-credits scene the switch waits for keeps the jump`() {
+        // The card rule holds back over a 40 s scene: the switch is at its end.
+        assertFalse(skipToNext(target = 1_400_000L, autoStart = 1_440_000L))
     }
 
     @Test

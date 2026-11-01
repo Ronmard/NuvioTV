@@ -198,16 +198,16 @@ object PlayerNextEpisodeRules {
     /**
      * Whether skipping an outro should start the next episode instead of jumping: the skip lands
      * within [OUTRO_SKIP_TO_NEXT_EPISODE_WINDOW_MS] of [autoStartMs] (or past it), so the jump and
-     * its rebuffer would only lead to the switch a moment later. A skip to a post-credits scene
-     * keeps its jump; so does one that leaves more than the window to watch (a preview, say).
+     * its rebuffer would only lead to the switch a moment later. Content after the outro counts
+     * only through the auto-start point: a post-credits scene or preview it waits for leaves more
+     * than the window to watch, and keeps the jump.
      */
     fun outroSkipStartsNextEpisode(
         intervalType: String,
         skipTargetMs: Long,
         autoStartMs: Long?,
-        targetsPostCredits: Boolean,
     ): Boolean {
-        if (intervalType !in OUTRO_SEGMENT_TYPES || targetsPostCredits || autoStartMs == null) return false
+        if (intervalType !in OUTRO_SEGMENT_TYPES || autoStartMs == null) return false
         return skipTargetMs >= autoStartMs - OUTRO_SKIP_TO_NEXT_EPISODE_WINDOW_MS
     }
 

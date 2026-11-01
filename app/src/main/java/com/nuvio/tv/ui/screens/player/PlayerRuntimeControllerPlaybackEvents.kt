@@ -218,7 +218,7 @@ internal fun PlayerRuntimeController.skipInterval(interval: SkipInterval, userIn
     } else {
         (targetTime * 1000).toLong()
     }
-    if (skipOutroIntoNextEpisode(interval, seekMs.coerceAtMost(duration), postCredits != null, userInitiated)) {
+    if (skipOutroIntoNextEpisode(interval, seekMs.coerceAtMost(duration), userInitiated)) {
         return true
     }
     val seekParameters = if (postCredits != null || interval.type == "movie-credits") {
@@ -242,7 +242,6 @@ internal fun PlayerRuntimeController.skipInterval(interval: SkipInterval, userIn
 private fun PlayerRuntimeController.skipOutroIntoNextEpisode(
     interval: SkipInterval,
     skipTargetMs: Long,
-    targetsPostCredits: Boolean,
     userInitiated: Boolean,
 ): Boolean {
     if (!streamAutoPlayNextEpisodeEnabledSetting || isPartyControlLocked) return false
@@ -255,7 +254,7 @@ private fun PlayerRuntimeController.skipOutroIntoNextEpisode(
         thresholdPercent = nextEpisodeThresholdPercentSetting,
         thresholdMinutesBeforeEnd = nextEpisodeThresholdMinutesBeforeEndSetting
     )
-    if (!PlayerNextEpisodeRules.outroSkipStartsNextEpisode(interval.type, skipTargetMs, autoStartMs, targetsPostCredits)) {
+    if (!PlayerNextEpisodeRules.outroSkipStartsNextEpisode(interval.type, skipTargetMs, autoStartMs)) {
         return false
     }
     _uiState.update { it.copy(activeSkipInterval = null, skipIntervalDismissed = true) }
