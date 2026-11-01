@@ -523,6 +523,8 @@ class PlayerRuntimeController(
     internal var nextEpisodeVideo: Video? = null
     internal var nextEpisodePreloadJob: Job? = null
     internal var nextEpisodePreloadTriggered: Boolean = false
+    /** The next episode's source, picked early (see PlayerNextEpisodePrepare). */
+    internal val nextEpisodePrepare = NextEpisodePrepareState()
     internal var userPausedManually = false
 
     internal var isInBackground: Boolean = false
@@ -577,6 +579,8 @@ class PlayerRuntimeController(
     internal var streamAutoPlayPreferBingeGroupForNextEpisodeSetting: Boolean = false
     internal var streamAutoPlayTimeoutSecondsSetting: Int = 10
     internal var preloadNextEpisodeSourcesSetting: Boolean = false
+    internal var prepareNextEpisodeEnabledSetting: Boolean = true
+    internal var prepareNextEpisodePercentSetting: Float = PlayerSettings.DEFAULT_PREPARE_NEXT_EPISODE_PERCENT
     internal var nextEpisodeThresholdModeSetting: NextEpisodeThresholdMode = NextEpisodeThresholdMode.PERCENTAGE
     internal var nextEpisodeThresholdPercentSetting: Float = 98f
     internal var nextEpisodeThresholdMinutesBeforeEndSetting: Float = 2f

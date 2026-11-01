@@ -207,6 +207,28 @@ internal fun PlaybackUpNextSection(
         )
     }
 
+    if (settings.streamAutoPlayNextEpisodeEnabled) {
+        SettingsToggleRow(
+            title = stringResource(R.string.autoplay_prepare_next_episode),
+            subtitle = stringResource(R.string.autoplay_prepare_next_episode_sub),
+            checked = settings.prepareNextEpisodeEnabled,
+            onToggle = { onUpdate { setPrepareNextEpisodeEnabled(!settings.prepareNextEpisodeEnabled) } }
+        )
+
+        if (settings.prepareNextEpisodeEnabled) {
+            SliderSettingsItem(
+                title = stringResource(R.string.autoplay_prepare_next_episode_percent),
+                subtitle = stringResource(R.string.autoplay_prepare_next_episode_percent_sub),
+                value = settings.prepareNextEpisodePercent.roundToInt(),
+                valueText = "${settings.prepareNextEpisodePercent.roundToInt()}%",
+                minValue = PlayerSettings.MIN_PREPARE_NEXT_EPISODE_PERCENT,
+                maxValue = PlayerSettings.MAX_PREPARE_NEXT_EPISODE_PERCENT,
+                step = PlayerSettings.PREPARE_NEXT_EPISODE_PERCENT_STEP,
+                onValueChange = { percent -> onUpdate { setPrepareNextEpisodePercent(percent.toFloat()) } }
+            )
+        }
+    }
+
     SettingsActionRow(
         title = stringResource(R.string.autoplay_threshold_mode),
         subtitle = null,

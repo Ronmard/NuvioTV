@@ -403,6 +403,8 @@ internal fun PlayerRuntimeController.observeSubtitleSettings() {
             streamAutoPlayNextEpisodeEnabledSetting = settings.streamAutoPlayNextEpisodeEnabled
             streamAutoPlayTimeoutSecondsSetting = settings.streamAutoPlayTimeoutSeconds
             preloadNextEpisodeSourcesSetting = settings.preloadNextEpisodeSources
+            prepareNextEpisodeEnabledSetting = settings.prepareNextEpisodeEnabled
+            prepareNextEpisodePercentSetting = settings.prepareNextEpisodePercent
             _uiState.update {
                 it.copy(
                     streamAutoPlayMode = settings.streamAutoPlayMode,

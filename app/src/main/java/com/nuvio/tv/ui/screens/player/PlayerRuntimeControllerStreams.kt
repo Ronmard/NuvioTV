@@ -1955,27 +1955,43 @@ internal fun PlayerRuntimeController.playNextEpisode(userInitiated: Boolean = fa
         )
     }
 
+    val prepared = takePreparedNextEpisode(nextVideo.id)
     nextEpisodeAutoPlayJob?.cancel()
     nextEpisodeAutoPlayJob = scope.launch {
+        var preparedUsed = false
         try {
             streamRepository.setLocalPluginSearchPaused(false)
             val playerSettings = playerSettingsDataStore.playerSettings.first()
             val videoIdAtStart = currentVideoId
-            val result = searchNextEpisodeStream(
-                nextVideo = nextVideo,
-                type = type,
-                playerSettings = playerSettings,
-                // Addons still answering and this episode still playing: wait for them instead of
-                // opening the picker at the auto-play timeout. The wait ends when the episode ends.
-                keepWaitingAfterTimeout = {
-                    currentVideoId == videoIdAtStart && !_uiState.value.playbackEnded
-                },
-                background = false,
-            )
+            // A source prepared while this episode played skips the search (and its link is
+            // resolved again when it may have expired).
+            val preparedStream = prepared?.playableStream { stream ->
+                resolveDirectDebridStreamIfNeeded(stream, nextVideo.season, nextVideo.episode)
+            }
+            val result = if (preparedStream != null) {
+                NextEpisodeSearchResult.Selected(stream = preparedStream, sourceStream = prepared?.sourceStream ?: preparedStream)
+            } else {
+                searchNextEpisodeStream(
+                    nextVideo = nextVideo,
+                    type = type,
+                    playerSettings = playerSettings,
+                    // Addons still answering and this episode still playing: wait for them instead
+                    // of opening the picker at the auto-play timeout. The wait ends when the
+                    // episode ends.
+                    keepWaitingAfterTimeout = {
+                        currentVideoId == videoIdAtStart && !_uiState.value.playbackEnded
+                    },
+                    background = false,
+                )
+            }
             if (result is NextEpisodeSearchResult.Selected) {
                 val streamToPlay = result.stream
                 val sourceName = (streamToPlay.name?.takeIf { it.isNotBlank() } ?: streamToPlay.addonName).trim()
-                for (remaining in 3 downTo 1) {
+                // A prepared episode switches at once: its countdown, if one is set, already ran on
+                // the card up to this point.
+                val countdownSeconds = if (preparedStream != null) 0 else 3
+                preparedUsed = preparedStream != null
+                for (remaining in countdownSeconds downTo 1) {
                     _uiState.update { current ->
                         val episodeForMode = current.nextEpisode ?: nextInfo
                         current.copy(
@@ -2014,6 +2030,9 @@ internal fun PlayerRuntimeController.playNextEpisode(userInitiated: Boolean = fa
                 )
             }
         } catch (e: CancellationException) {
+            // Cancelled before switching (a seek back, Back on the card): keep the preparation for
+            // the next run.
+            if (prepared != null && !preparedUsed) restorePreparedNextEpisode(prepared)
             throw e
         } catch (e: Exception) {
             _uiState.update {

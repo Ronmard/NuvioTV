@@ -376,6 +376,7 @@ internal fun PlayerRuntimeController.evaluatePostPlayOverlayVisibility(positionM
         endDetectionArmed = true
     }
     if (!_uiState.value.error.isNullOrBlank()) return
+    onNextEpisodePrepareTick(positionMs = positionMs, durationMs = effectiveDurationEarly)
 
     val state = _uiState.value
     if (state.nextEpisode == null || nextEpisodeVideo == null) {

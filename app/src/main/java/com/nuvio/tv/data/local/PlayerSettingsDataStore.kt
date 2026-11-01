@@ -344,6 +344,8 @@ data class PlayerSettings(
     val streamAutoPlayReuseBingeGroup: Boolean = false,
     val streamAutoPlayTimeoutSeconds: Int = 10,
     val preloadNextEpisodeSources: Boolean = false,
+    val prepareNextEpisodeEnabled: Boolean = true,
+    val prepareNextEpisodePercent: Float = DEFAULT_PREPARE_NEXT_EPISODE_PERCENT,
     val stillWatchingEnabled: Boolean = false,
     val stillWatchingEpisodeThreshold: Int = DEFAULT_STILL_WATCHING_EPISODE_THRESHOLD,
     val nextEpisodeThresholdMode: NextEpisodeThresholdMode = NextEpisodeThresholdMode.PERCENTAGE,
@@ -416,6 +418,22 @@ data class PlayerSettings(
             return STREAM_AUTOPLAY_TIMEOUT_VALUES
                 .filter { it != STREAM_AUTOPLAY_TIMEOUT_UNLIMITED }
                 .minBy { kotlin.math.abs(it.toLong() - raw.toLong()) }
+        }
+
+        /** Range and step of "Prepare next episode at" (percent of the episode watched). */
+        const val MIN_PREPARE_NEXT_EPISODE_PERCENT = 50
+        const val MAX_PREPARE_NEXT_EPISODE_PERCENT = 95
+        const val PREPARE_NEXT_EPISODE_PERCENT_STEP = 5
+        const val DEFAULT_PREPARE_NEXT_EPISODE_PERCENT = 70f
+
+        fun normalizePrepareNextEpisodePercent(value: Float?): Float {
+            val raw = value ?: return DEFAULT_PREPARE_NEXT_EPISODE_PERCENT
+            val step = PREPARE_NEXT_EPISODE_PERCENT_STEP
+            val snapped = (kotlin.math.round(raw / step) * step)
+            return snapped.coerceIn(
+                MIN_PREPARE_NEXT_EPISODE_PERCENT.toFloat(),
+                MAX_PREPARE_NEXT_EPISODE_PERCENT.toFloat(),
+            )
         }
 
         fun isBoundedTimeout(timeoutSeconds: Int): Boolean =
@@ -670,6 +688,8 @@ class PlayerSettingsDataStore @Inject constructor(
     private val streamAutoPlayReuseBingeGroupKey = booleanPreferencesKey("stream_auto_play_reuse_binge_group")
     private val streamAutoPlayTimeoutSecondsKey = intPreferencesKey("stream_auto_play_timeout_seconds")
     private val preloadNextEpisodeSourcesKey = booleanPreferencesKey("preload_next_episode_sources")
+    private val prepareNextEpisodeEnabledKey = booleanPreferencesKey("prepare_next_episode_enabled")
+    private val prepareNextEpisodePercentKey = floatPreferencesKey("prepare_next_episode_percent")
     private val stillWatchingEnabledKey = booleanPreferencesKey("still_watching_enabled")
     private val stillWatchingEpisodeThresholdKey = intPreferencesKey("still_watching_episode_threshold")
     private val nextEpisodeThresholdModeKey = stringPreferencesKey("next_episode_threshold_mode")
@@ -1079,6 +1099,10 @@ class PlayerSettingsDataStore @Inject constructor(
                     prefs[streamAutoPlayTimeoutSecondsKey]
                 ),
                 preloadNextEpisodeSources = prefs[preloadNextEpisodeSourcesKey] ?: false,
+                prepareNextEpisodeEnabled = prefs[prepareNextEpisodeEnabledKey] ?: true,
+                prepareNextEpisodePercent = PlayerSettings.normalizePrepareNextEpisodePercent(
+                    prefs[prepareNextEpisodePercentKey]
+                ),
                 stillWatchingEnabled = prefs[stillWatchingEnabledKey] ?: false,
                 stillWatchingEpisodeThreshold = prefs[stillWatchingEpisodeThresholdKey]
                     ?.coerceIn(
@@ -1497,6 +1521,18 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setPreloadNextEpisodeSources(enabled: Boolean) {
         store().edit { prefs ->
             prefs[preloadNextEpisodeSourcesKey] = enabled
+        }
+    }
+
+    suspend fun setPrepareNextEpisodeEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[prepareNextEpisodeEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setPrepareNextEpisodePercent(percent: Float) {
+        store().edit { prefs ->
+            prefs[prepareNextEpisodePercentKey] = PlayerSettings.normalizePrepareNextEpisodePercent(percent)
         }
     }
 

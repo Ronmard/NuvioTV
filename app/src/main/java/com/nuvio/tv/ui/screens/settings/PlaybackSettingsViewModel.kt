@@ -551,6 +551,14 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setPreloadNextEpisodeSources(enabled)
     }
 
+    suspend fun setPrepareNextEpisodeEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setPrepareNextEpisodeEnabled(enabled)
+    }
+
+    suspend fun setPrepareNextEpisodePercent(percent: Float) {
+        playerSettingsDataStore.setPrepareNextEpisodePercent(percent)
+    }
+
     suspend fun setStillWatchingEnabled(enabled: Boolean) {
         playerSettingsDataStore.setStillWatchingEnabled(enabled)
     }
