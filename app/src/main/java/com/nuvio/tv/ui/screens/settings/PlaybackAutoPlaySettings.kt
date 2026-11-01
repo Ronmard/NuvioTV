@@ -226,6 +226,20 @@ internal fun PlaybackUpNextSection(
                 step = PlayerSettings.PREPARE_NEXT_EPISODE_PERCENT_STEP,
                 onValueChange = { percent -> onUpdate { setPrepareNextEpisodePercent(percent.toFloat()) } }
             )
+
+            val countdownSeconds = settings.nextEpisodeCountdownSeconds
+            SliderSettingsItem(
+                title = stringResource(R.string.autoplay_next_episode_countdown),
+                subtitle = stringResource(R.string.autoplay_next_episode_countdown_sub),
+                values = PlayerSettings.NEXT_EPISODE_COUNTDOWN_CHOICES,
+                selected = countdownSeconds,
+                valueText = if (countdownSeconds == 0) {
+                    stringResource(R.string.autoplay_next_episode_countdown_off)
+                } else {
+                    "${countdownSeconds}s"
+                },
+                onValueChange = { seconds -> onUpdate { setNextEpisodeCountdownSeconds(seconds) } }
+            )
         }
     }
 

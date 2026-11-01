@@ -40,6 +40,13 @@ sealed interface PostPlayMode {
         val searching: Boolean = false,
         val sourceName: String? = null,
         val countdownSec: Int? = null,
+        /**
+         * The countdown before a prepared next episode starts at the outro or the end (see
+         * PlayerNextEpisodeRules.leadCountdown): seconds left and the ring's remaining fraction.
+         * Unlike [countdownSec], no run is in progress while it shows.
+         */
+        val leadCountdownSec: Int? = null,
+        val leadCountdownFraction: Float? = null,
     ) : PostPlayMode
 
     data class StillWatching(

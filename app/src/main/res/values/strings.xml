@@ -957,6 +957,9 @@
     <string name="autoplay_prepare_next_episode_sub">Pick the next episode\'s source with the auto-play rules once playback reaches a point in the episode.</string>
     <string name="autoplay_prepare_next_episode_percent">Prepare Next Episode At</string>
     <string name="autoplay_prepare_next_episode_percent_sub">Percent of the episode watched before preparing starts.</string>
+    <string name="autoplay_next_episode_countdown">Countdown Before Next Episode</string>
+    <string name="autoplay_next_episode_countdown_sub">With the next episode prepared, count down on the card so it ends exactly when the outro (or the episode) ends and the next episode starts. Off starts it at that point without a countdown.</string>
+    <string name="autoplay_next_episode_countdown_off">Off</string>
 
     <string name="autoplay_reuse_last_link">Reuse Last Link</string>
     <string name="autoplay_reuse_last_link_sub">Auto-play your last working stream for this same movie/episode when cache is still valid</string>

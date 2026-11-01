@@ -279,4 +279,68 @@ class PlayerNextEpisodeRulesTest {
     fun `an unknown duration is never an auto start point`() {
         assertFalse(autoStart(positionSec = 100.0, durationSec = 0.0))
     }
+
+    private fun autoStartMs(durationSec: Double, vararg segments: SkipInterval) =
+        PlayerNextEpisodeRules.nextEpisodeAutoStartPositionMs(
+            durationMs = (durationSec * 1_000).toLong(),
+            skipIntervals = segments.toList(),
+            thresholdMode = NextEpisodeThresholdMode.PERCENTAGE,
+            thresholdPercent = 99f,
+            thresholdMinutesBeforeEnd = 2f,
+        )
+
+    private fun isAutoStartAt(positionMs: Long, durationSec: Double, vararg segments: SkipInterval) =
+        PlayerNextEpisodeRules.isNextEpisodeAutoStartPoint(
+            positionMs = positionMs,
+            durationMs = (durationSec * 1_000).toLong(),
+            skipIntervals = segments.toList(),
+            thresholdMode = NextEpisodeThresholdMode.PERCENTAGE,
+            thresholdPercent = 99f,
+            thresholdMinutesBeforeEnd = 2f,
+        )
+
+    @Test
+    fun `without outro data the next episode starts on its own at the end window`() {
+        assertEquals(1_440_000L - PlayerNextEpisodeRules.END_AUTO_START_WINDOW_MS, autoStartMs(1_440.0))
+    }
+
+    @Test
+    fun `an outro that runs to the end starts the next episode at the outro start`() {
+        val outro = SkipInterval(1_350.0, 1_435.0, "outro", "introdb")
+        assertEquals(1_350_000L, autoStartMs(1_440.0, outro))
+    }
+
+    @Test
+    fun `a preview after the outro moves the start to where the card rule agrees`() {
+        // Monogatari S1E2: the preview after the outro holds the card back to 99%.
+        val outro = SkipInterval(1_410.0, 1_499.0, "outro", "chapters")
+        val startMs = autoStartMs(1_532.498, outro)!!
+        assertTrue(isAutoStartAt(startMs, 1_532.498, outro))
+        assertFalse(isAutoStartAt(startMs - 2 * PlayerNextEpisodeRules.AUTO_START_SEARCH_PRECISION_MS, 1_532.498, outro))
+        assertTrue(startMs in 1_517_000L..1_518_000L)
+    }
+
+    @Test
+    fun `the auto start position is unknown without a duration`() {
+        assertNull(autoStartMs(0.0))
+    }
+
+    @Test
+    fun `the lead countdown runs only in its window before the auto start`() {
+        val startMs = 100_000L
+        val totalMs = 5_000L
+        assertNull(PlayerNextEpisodeRules.leadCountdown(94_999L, startMs, totalMs))
+        val full = PlayerNextEpisodeRules.leadCountdown(95_000L, startMs, totalMs)!!
+        assertEquals(5, full.remainingSeconds)
+        assertEquals(1f, full.remainingFraction, 0.0001f)
+        val partway = PlayerNextEpisodeRules.leadCountdown(97_600L, startMs, totalMs)!!
+        assertEquals(3, partway.remainingSeconds)
+        assertEquals(0.48f, partway.remainingFraction, 0.0001f)
+        assertNull(PlayerNextEpisodeRules.leadCountdown(100_000L, startMs, totalMs))
+    }
+
+    @Test
+    fun `the lead countdown is off at zero seconds`() {
+        assertNull(PlayerNextEpisodeRules.leadCountdown(97_000L, 100_000L, 0L))
+    }
 }

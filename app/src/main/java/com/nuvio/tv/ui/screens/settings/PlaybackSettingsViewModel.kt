@@ -559,6 +559,10 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setPrepareNextEpisodePercent(percent)
     }
 
+    suspend fun setNextEpisodeCountdownSeconds(seconds: Int) {
+        playerSettingsDataStore.setNextEpisodeCountdownSeconds(seconds)
+    }
+
     suspend fun setStillWatchingEnabled(enabled: Boolean) {
         playerSettingsDataStore.setStillWatchingEnabled(enabled)
     }

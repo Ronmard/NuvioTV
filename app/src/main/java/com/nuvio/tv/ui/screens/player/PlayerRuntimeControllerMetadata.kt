@@ -424,7 +424,9 @@ internal fun PlayerRuntimeController.evaluatePostPlayOverlayVisibility(positionM
         thresholdMinutesBeforeEnd = nextEpisodeThresholdMinutesBeforeEndSetting
     )
 
-    if (!shouldShow) return
+    // With a prepared next episode the card can show earlier, for its countdown.
+    val lead = currentNextEpisodeLeadCountdown(positionMs, effectiveDuration)
+    if (!shouldShow && lead == null) return
 
     if (_uiState.value.postPlayDismissedForCurrentEpisode) return
 
@@ -437,7 +439,7 @@ internal fun PlayerRuntimeController.evaluatePostPlayOverlayVisibility(positionM
     )
 
     if (shouldEnterStillWatching) {
-        enterStillWatchingPromptMode()
+        if (shouldShow) enterStillWatchingPromptMode()
     } else {
         val ne = state.nextEpisode
         val isUnplayable = !ne.hasAired ||
@@ -447,7 +449,7 @@ internal fun PlayerRuntimeController.evaluatePostPlayOverlayVisibility(positionM
         // The card shows at its threshold; the next episode only starts on its own at the
         // outro or the end (see updateShownNextEpisodeCard).
         _uiState.update {
-            it.copy(postPlayMode = PostPlayMode.AutoPlay(nextEpisode = state.nextEpisode))
+            it.copy(postPlayMode = PostPlayMode.AutoPlay(nextEpisode = state.nextEpisode).withLeadCountdown(lead))
         }
         if (streamAutoPlayNextEpisodeEnabledSetting &&
             PlayerNextEpisodeRules.isNextEpisodeAutoStartPoint(
@@ -513,14 +515,57 @@ private fun PlayerRuntimeController.updateShownNextEpisodeCard(
         return
     }
     if (mode.searching || mode.countdownSec != null) return
-    if (!cardShown) {
+    val lead = currentNextEpisodeLeadCountdown(positionMs, durationMs)
+    if (!cardShown && lead == null) {
         _uiState.update { if (it.postPlayMode === mode) it.copy(postPlayMode = null) else it }
         return
+    }
+    val updated = mode.withLeadCountdown(lead)
+    if (updated != mode) {
+        _uiState.update { if (it.postPlayMode === mode) it.copy(postPlayMode = updated) else it }
     }
     if (atAutoStart && streamAutoPlayNextEpisodeEnabledSetting) {
         startAutomaticNextEpisodeRun()
     }
 }
+
+/** The lead countdown and its source name, or null; see [PlayerNextEpisodeRules.leadCountdown]. */
+private class LeadCountdownDisplay(val countdown: NextEpisodeLeadCountdown, val sourceName: String)
+
+/**
+ * The countdown to show on the card now: only with a prepared source for the next episode, no run in
+ * progress, auto-play on and "Countdown before next episode" set, inside the countdown's window
+ * before the point where the next episode starts on its own. It follows the playback position, so
+ * it pauses with playback and follows seeks.
+ */
+private fun PlayerRuntimeController.currentNextEpisodeLeadCountdown(
+    positionMs: Long,
+    durationMs: Long,
+): LeadCountdownDisplay? {
+    val totalMs = nextEpisodeCountdownSecondsSetting * 1_000L
+    if (totalMs <= 0L || !streamAutoPlayNextEpisodeEnabledSetting || isPartyControlLocked) return null
+    if (nextEpisodeAutoPlayJob?.isActive == true) return null
+    val next = _uiState.value.nextEpisode?.takeIf { it.hasAired } ?: return null
+    val prepared = nextEpisodePrepare.prepared?.takeIf { it.videoId == next.videoId } ?: return null
+    val startMs = PlayerNextEpisodeRules.nextEpisodeAutoStartPositionMs(
+        durationMs = durationMs,
+        skipIntervals = skipIntervals,
+        thresholdMode = nextEpisodeThresholdModeSetting,
+        thresholdPercent = nextEpisodeThresholdPercentSetting,
+        thresholdMinutesBeforeEnd = nextEpisodeThresholdMinutesBeforeEndSetting
+    ) ?: return null
+    val countdown = PlayerNextEpisodeRules.leadCountdown(positionMs, startMs, totalMs) ?: return null
+    val stream = prepared.stream
+    val sourceName = (stream.name?.takeIf { it.isNotBlank() } ?: stream.addonName).trim()
+    return LeadCountdownDisplay(countdown, sourceName)
+}
+
+private fun PostPlayMode.AutoPlay.withLeadCountdown(lead: LeadCountdownDisplay?): PostPlayMode.AutoPlay =
+    copy(
+        sourceName = lead?.sourceName,
+        leadCountdownSec = lead?.countdown?.remainingSeconds,
+        leadCountdownFraction = lead?.countdown?.remainingFraction,
+    )
 
 /** Starts the next episode on its own (not from a Next press), so a seek back can cancel it. */
 internal fun PlayerRuntimeController.startAutomaticNextEpisodeRun() {

@@ -8,6 +8,8 @@ import com.nuvio.tv.ui.theme.NuvioTheme
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.updateTransition
 import androidx.compose.animation.fadeIn
@@ -16,6 +18,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -46,7 +49,11 @@ import androidx.compose.ui.focus.FocusRequester.Companion.Cancel
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onPlaced
@@ -207,6 +214,8 @@ private fun AutoPlayBody(
                 mode.searching -> stringResource(R.string.next_episode_finding_source)
                 !mode.sourceName.isNullOrBlank() && mode.countdownSec != null ->
                     stringResource(R.string.next_episode_playing_via, mode.sourceName, mode.countdownSec)
+                !mode.sourceName.isNullOrBlank() && mode.leadCountdownSec != null ->
+                    stringResource(R.string.next_episode_playing_via, mode.sourceName, mode.leadCountdownSec)
                 else -> null
             }
             if (statusText != null) {
@@ -226,12 +235,19 @@ private fun AutoPlayBody(
                 .padding(horizontal = 10.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
-                imageVector = Icons.Default.PlayArrow,
-                contentDescription = null,
-                tint = if (isPlayable) Color.White else Color.White.copy(alpha = 0.65f),
-                modifier = Modifier.size(14.dp),
-            )
+            val countdownFraction = mode.leadCountdownFraction
+                ?: mode.countdownSec?.let { it / NEXT_EPISODE_RUN_COUNTDOWN_SECONDS.toFloat() }
+            Box(contentAlignment = Alignment.Center) {
+                if (countdownFraction != null) {
+                    NextEpisodeCountdownRing(fraction = countdownFraction)
+                }
+                Icon(
+                    imageVector = Icons.Default.PlayArrow,
+                    contentDescription = null,
+                    tint = if (isPlayable) Color.White else Color.White.copy(alpha = 0.65f),
+                    modifier = Modifier.size(14.dp),
+                )
+            }
             Text(
                 text = if (isPlayable) {
                     stringResource(R.string.next_episode_play)
@@ -243,6 +259,40 @@ private fun AutoPlayBody(
                 modifier = Modifier.padding(start = 3.dp),
             )
         }
+    }
+}
+
+/** Seconds of the countdown a run shows before it switches (the 3-2-1 in playNextEpisode). */
+private const val NEXT_EPISODE_RUN_COUNTDOWN_SECONDS = 3
+
+/**
+ * A ring around the Play icon that empties as the countdown to the next episode runs out; it eases
+ * between the position updates.
+ */
+@Composable
+private fun NextEpisodeCountdownRing(fraction: Float) {
+    val animated by animateFloatAsState(
+        targetValue = fraction.coerceIn(0f, 1f),
+        animationSpec = tween(durationMillis = 500, easing = LinearEasing),
+        label = "nextEpisodeCountdownRing",
+    )
+    val ringColor = NuvioTheme.colors.FocusRing
+    Canvas(modifier = Modifier.size(22.dp)) {
+        val strokeWidth = 2.dp.toPx()
+        drawCircle(
+            color = Color.White.copy(alpha = 0.18f),
+            radius = (size.minDimension - strokeWidth) / 2f,
+            style = Stroke(width = strokeWidth),
+        )
+        drawArc(
+            color = ringColor,
+            startAngle = -90f,
+            sweepAngle = 360f * animated,
+            useCenter = false,
+            topLeft = Offset(strokeWidth / 2f, strokeWidth / 2f),
+            size = Size(size.width - strokeWidth, size.height - strokeWidth),
+            style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
+        )
     }
 }
 

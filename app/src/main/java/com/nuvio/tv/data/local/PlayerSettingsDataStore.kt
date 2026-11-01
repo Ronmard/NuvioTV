@@ -346,6 +346,8 @@ data class PlayerSettings(
     val preloadNextEpisodeSources: Boolean = false,
     val prepareNextEpisodeEnabled: Boolean = true,
     val prepareNextEpisodePercent: Float = DEFAULT_PREPARE_NEXT_EPISODE_PERCENT,
+    /** Countdown on the card before a prepared next episode starts; 0 is off. */
+    val nextEpisodeCountdownSeconds: Int = 0,
     val stillWatchingEnabled: Boolean = false,
     val stillWatchingEpisodeThreshold: Int = DEFAULT_STILL_WATCHING_EPISODE_THRESHOLD,
     val nextEpisodeThresholdMode: NextEpisodeThresholdMode = NextEpisodeThresholdMode.PERCENTAGE,
@@ -435,6 +437,9 @@ data class PlayerSettings(
                 MAX_PREPARE_NEXT_EPISODE_PERCENT.toFloat(),
             )
         }
+
+        /** Choices for "Countdown before next episode", in seconds; 0 is off. */
+        val NEXT_EPISODE_COUNTDOWN_CHOICES: List<Int> = listOf(0, 3, 5, 10, 15)
 
         fun isBoundedTimeout(timeoutSeconds: Int): Boolean =
             timeoutSeconds > 0 && timeoutSeconds != STREAM_AUTOPLAY_TIMEOUT_UNLIMITED
@@ -690,6 +695,7 @@ class PlayerSettingsDataStore @Inject constructor(
     private val preloadNextEpisodeSourcesKey = booleanPreferencesKey("preload_next_episode_sources")
     private val prepareNextEpisodeEnabledKey = booleanPreferencesKey("prepare_next_episode_enabled")
     private val prepareNextEpisodePercentKey = floatPreferencesKey("prepare_next_episode_percent")
+    private val nextEpisodeCountdownSecondsKey = intPreferencesKey("next_episode_countdown_seconds")
     private val stillWatchingEnabledKey = booleanPreferencesKey("still_watching_enabled")
     private val stillWatchingEpisodeThresholdKey = intPreferencesKey("still_watching_episode_threshold")
     private val nextEpisodeThresholdModeKey = stringPreferencesKey("next_episode_threshold_mode")
@@ -1103,6 +1109,8 @@ class PlayerSettingsDataStore @Inject constructor(
                 prepareNextEpisodePercent = PlayerSettings.normalizePrepareNextEpisodePercent(
                     prefs[prepareNextEpisodePercentKey]
                 ),
+                nextEpisodeCountdownSeconds = prefs[nextEpisodeCountdownSecondsKey]
+                    ?.takeIf { it in PlayerSettings.NEXT_EPISODE_COUNTDOWN_CHOICES } ?: 0,
                 stillWatchingEnabled = prefs[stillWatchingEnabledKey] ?: false,
                 stillWatchingEpisodeThreshold = prefs[stillWatchingEpisodeThresholdKey]
                     ?.coerceIn(
@@ -1533,6 +1541,13 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setPrepareNextEpisodePercent(percent: Float) {
         store().edit { prefs ->
             prefs[prepareNextEpisodePercentKey] = PlayerSettings.normalizePrepareNextEpisodePercent(percent)
+        }
+    }
+
+    suspend fun setNextEpisodeCountdownSeconds(seconds: Int) {
+        if (seconds !in PlayerSettings.NEXT_EPISODE_COUNTDOWN_CHOICES) return
+        store().edit { prefs ->
+            prefs[nextEpisodeCountdownSecondsKey] = seconds
         }
     }
 

@@ -156,6 +156,56 @@ object PlayerNextEpisodeRules {
             )
     }
 
+    /**
+     * The first position where [isNextEpisodeAutoStartPoint] holds: the outro start (or, when the
+     * card rule holds back over a post-credits scene, the first position past it where the rule
+     * agrees), else the end window. The card rule only ever asks "position >= some point", so a
+     * binary search finds it. Null while the duration is unknown.
+     */
+    fun nextEpisodeAutoStartPositionMs(
+        durationMs: Long,
+        skipIntervals: List<SkipInterval>,
+        thresholdMode: NextEpisodeThresholdMode,
+        thresholdPercent: Float,
+        thresholdMinutesBeforeEnd: Float
+    ): Long? {
+        if (durationMs <= 0L) return null
+        val endStartMs = (durationMs - END_AUTO_START_WINDOW_MS).coerceAtLeast(0L)
+        val outroStartMs = skipIntervals
+            .filter { it.type in OUTRO_SEGMENT_TYPES }
+            .minOfOrNull { (it.startTime * 1_000.0).toLong() }
+            ?.coerceIn(0L, endStartMs)
+            ?: return endStartMs
+        fun cardRuleAt(positionMs: Long) = shouldShowNextEpisodeCard(
+            positionMs = positionMs,
+            durationMs = durationMs,
+            skipIntervals = skipIntervals,
+            thresholdMode = thresholdMode,
+            thresholdPercent = thresholdPercent,
+            thresholdMinutesBeforeEnd = thresholdMinutesBeforeEnd
+        )
+        var low = outroStartMs
+        if (cardRuleAt(low)) return low
+        var high = endStartMs
+        if (!cardRuleAt(high)) return endStartMs
+        while (high - low > AUTO_START_SEARCH_PRECISION_MS) {
+            val mid = (low + high) / 2
+            if (cardRuleAt(mid)) high = mid else low = mid
+        }
+        return high
+    }
+
+    /**
+     * The countdown on the card before a prepared next episode starts: [totalMs] long, ending at
+     * [autoStartMs]. Null outside that window, or when the countdown is off.
+     */
+    fun leadCountdown(positionMs: Long, autoStartMs: Long, totalMs: Long): NextEpisodeLeadCountdown? {
+        if (totalMs <= 0L) return null
+        val remainingMs = autoStartMs - positionMs
+        if (remainingMs <= 0L || remainingMs > totalMs) return null
+        return NextEpisodeLeadCountdown(remainingMs = remainingMs, totalMs = totalMs)
+    }
+
     /** True when a reading is clearly before the end and outside the next-episode window. */
     fun isAwayFromEnd(
         positionMs: Long,
@@ -193,6 +243,9 @@ object PlayerNextEpisodeRules {
     /** How close to the duration counts as the end for starting the next episode on its own. */
     const val END_AUTO_START_WINDOW_MS = 1_000L
 
+    /** Precision of the auto-start position search; finer than one position update. */
+    const val AUTO_START_SEARCH_PRECISION_MS = 100L
+
     /** How close to the duration MPV treats as the end of the file. */
     const val NEAR_END_MS = 500L
 
@@ -211,4 +264,10 @@ object PlayerNextEpisodeRules {
             durationMs - (clampedMinutes * 60_000f).toLong()
         }
     }
+}
+
+/** See [PlayerNextEpisodeRules.leadCountdown]. */
+data class NextEpisodeLeadCountdown(val remainingMs: Long, val totalMs: Long) {
+    val remainingSeconds: Int get() = ((remainingMs + 999) / 1_000).toInt()
+    val remainingFraction: Float get() = (remainingMs.toFloat() / totalMs).coerceIn(0f, 1f)
 }
