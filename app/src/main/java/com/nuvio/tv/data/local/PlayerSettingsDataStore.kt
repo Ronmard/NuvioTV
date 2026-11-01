@@ -350,6 +350,8 @@ data class PlayerSettings(
     val nextEpisodeCountdownSeconds: Int = 0,
     /** Open the prepared link ahead of time so the debrid service unlocks the file early. */
     val prewarmNextEpisodeEnabled: Boolean = DEFAULT_PREWARM_NEXT_EPISODE_ENABLED,
+    /** With the prewarm, also read the end of the file, where the seek index usually is. */
+    val prewarmNextEpisodeTailEnabled: Boolean = DEFAULT_PREWARM_NEXT_EPISODE_ENABLED,
     val stillWatchingEnabled: Boolean = false,
     val stillWatchingEpisodeThreshold: Int = DEFAULT_STILL_WATCHING_EPISODE_THRESHOLD,
     val nextEpisodeThresholdMode: NextEpisodeThresholdMode = NextEpisodeThresholdMode.PERCENTAGE,
@@ -442,7 +444,7 @@ data class PlayerSettings(
 
         /** Choices for "Countdown before next episode", in seconds; 0 is off. */
         val NEXT_EPISODE_COUNTDOWN_CHOICES: List<Int> = listOf(0, 3, 5, 10, 15)
-        /** On in debug builds, so the prewarm can be compared with it off; off in release builds. */
+        /** On in debug builds, so each prewarm step can be compared with it off; off in release builds. */
         val DEFAULT_PREWARM_NEXT_EPISODE_ENABLED: Boolean = com.nuvio.tv.BuildConfig.DEBUG
 
         fun isBoundedTimeout(timeoutSeconds: Int): Boolean =
@@ -701,6 +703,7 @@ class PlayerSettingsDataStore @Inject constructor(
     private val prepareNextEpisodePercentKey = floatPreferencesKey("prepare_next_episode_percent")
     private val nextEpisodeCountdownSecondsKey = intPreferencesKey("next_episode_countdown_seconds")
     private val prewarmNextEpisodeEnabledKey = booleanPreferencesKey("prewarm_next_episode_enabled")
+    private val prewarmNextEpisodeTailEnabledKey = booleanPreferencesKey("prewarm_next_episode_tail_enabled")
     private val stillWatchingEnabledKey = booleanPreferencesKey("still_watching_enabled")
     private val stillWatchingEpisodeThresholdKey = intPreferencesKey("still_watching_episode_threshold")
     private val nextEpisodeThresholdModeKey = stringPreferencesKey("next_episode_threshold_mode")
@@ -1117,6 +1120,8 @@ class PlayerSettingsDataStore @Inject constructor(
                 nextEpisodeCountdownSeconds = prefs[nextEpisodeCountdownSecondsKey]
                     ?.takeIf { it in PlayerSettings.NEXT_EPISODE_COUNTDOWN_CHOICES } ?: 0,
                 prewarmNextEpisodeEnabled = prefs[prewarmNextEpisodeEnabledKey]
+                    ?: PlayerSettings.DEFAULT_PREWARM_NEXT_EPISODE_ENABLED,
+                prewarmNextEpisodeTailEnabled = prefs[prewarmNextEpisodeTailEnabledKey]
                     ?: PlayerSettings.DEFAULT_PREWARM_NEXT_EPISODE_ENABLED,
                 stillWatchingEnabled = prefs[stillWatchingEnabledKey] ?: false,
                 stillWatchingEpisodeThreshold = prefs[stillWatchingEpisodeThresholdKey]
@@ -1561,6 +1566,12 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setPrewarmNextEpisodeEnabled(enabled: Boolean) {
         store().edit { prefs ->
             prefs[prewarmNextEpisodeEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setPrewarmNextEpisodeTailEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[prewarmNextEpisodeTailEnabledKey] = enabled
         }
     }
 

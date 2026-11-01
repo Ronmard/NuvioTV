@@ -43,6 +43,71 @@ class NextEpisodePrewarmTest {
         assertEquals("identity", headers["Accept-Encoding"])
     }
 
+    @Test
+    fun `the end-of-file request carries its own range`() {
+        val headers = nextEpisodePrewarmHeaders(mapOf("Referer" to "r"), ua, range = "bytes=100-199")
+        assertEquals("bytes=100-199", headers["Range"])
+        assertEquals("r", headers["Referer"])
+    }
+
+    // ---- file size from the first reply ----
+
+    @Test
+    fun `the size comes from a 206's Content-Range`() {
+        assertEquals(3_798_340_970L, parsePrewarmTotalSize(206, "bytes 0-0/3798340970", 1L))
+        assertEquals(3_798_340_970L, parsePrewarmTotalSize(206, " bytes 0-0/3798340970 ", null))
+    }
+
+    @Test
+    fun `a 200 gives its length as the size`() {
+        assertEquals(5_000_000L, parsePrewarmTotalSize(200, null, 5_000_000L))
+    }
+
+    @Test
+    fun `an unknown size gives null`() {
+        assertNull(parsePrewarmTotalSize(206, "bytes 0-0/*", 1L))
+        assertNull(parsePrewarmTotalSize(206, null, 1L))
+        assertNull(parsePrewarmTotalSize(206, "garbage", 1L))
+        assertNull(parsePrewarmTotalSize(200, null, null))
+        assertNull(parsePrewarmTotalSize(200, null, 0L))
+        assertNull(parsePrewarmTotalSize(206, "bytes 0-0/0", 1L))
+        assertNull(parsePrewarmTotalSize(416, "bytes */100", null))
+    }
+
+    // ---- end-of-file range ----
+
+    @Test
+    fun `a large file reads its last 3 MB`() {
+        val size = 3_798_340_970L
+        val tail = NEXT_EPISODE_PREWARM_TAIL_BYTES
+        assertEquals(3L * 1024 * 1024, tail)
+        assertEquals("bytes=${size - tail}-${size - 1}", nextEpisodeTailRange(size))
+    }
+
+    @Test
+    fun `the range covers exactly the tail bytes`() {
+        val range = nextEpisodeTailRange(10_000L, tailBytes = 1_000L)!!
+        assertEquals("bytes=9000-9999", range)
+        val (start, end) = range.removePrefix("bytes=").split('-').map { it.toLong() }
+        assertEquals(1_000L, end - start + 1)
+    }
+
+    @Test
+    fun `a file smaller than the tail is read from its second byte`() {
+        assertEquals("bytes=1-499", nextEpisodeTailRange(500L, tailBytes = 1_000L))
+        assertEquals("bytes=1-1000", nextEpisodeTailRange(1_001L, tailBytes = 1_000L))
+        assertEquals("bytes=1-1", nextEpisodeTailRange(2L))
+    }
+
+    @Test
+    fun `nothing is read when the size is unknown or the first byte was the whole file`() {
+        assertNull(nextEpisodeTailRange(null))
+        assertNull(nextEpisodeTailRange(0L))
+        assertNull(nextEpisodeTailRange(1L))
+        assertNull(nextEpisodeTailRange(-5L))
+        assertNull(nextEpisodeTailRange(10_000L, tailBytes = 0L))
+    }
+
     // ---- which links are prewarmed ----
 
     @Test
