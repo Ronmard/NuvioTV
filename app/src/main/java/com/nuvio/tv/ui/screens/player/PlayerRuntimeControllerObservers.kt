@@ -1,6 +1,7 @@
 package com.nuvio.tv.ui.screens.player
 
 import android.util.Log
+import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.core.player.OpenSubtitlesHasher
 import androidx.media3.common.C
 import androidx.media3.common.Player
@@ -15,6 +16,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
@@ -677,20 +679,62 @@ internal fun PlayerRuntimeController.fetchSkipIntervals(id: String?, season: Int
         return
     }
 
-    val imdbId = effectiveId.split(":").firstOrNull()?.takeIf { it.startsWith("tt") } ?: return
     if (season == null || episode == null) return
 
-    val key = "$imdbId:$season:$episode"
+    val knownImdbId = episodeSkipImdbId(videoId = effectiveId, contentId = id, metaImdbId = metaImdbId)
+    if (knownImdbId != null) {
+        val key = "$knownImdbId:$season:$episode"
+        if (skipIntroFetchedKey == key) return
+        skipIntroFetchedKey = key
+
+        scope.launch {
+            val api = withTimeoutOrNull(15_000L) {
+                skipIntroRepository.getSkipIntervals(knownImdbId, season, episode)
+            } ?: emptyList()
+            setApiSkipIntervals(api)
+        }
+        return
+    }
+
+    // A tmdb: (or other non-IMDb) id: IntroDB needs the show's IMDb id, which comes with
+    // its metadata. Wait for that to load (joining the player's own request) before giving up.
+    val type = contentType ?: return
+    val key = "meta:$id:$season:$episode"
     if (skipIntroFetchedKey == key) return
     skipIntroFetchedKey = key
 
     scope.launch {
+        val loadedImdbId = withTimeoutOrNull(SKIP_IMDB_META_WAIT_MS) {
+            (metaRepository.getMetaFromAllAddons(type = type, id = id)
+                .first { it !is NetworkResult.Loading } as? NetworkResult.Success)
+                ?.data?.imdbId
+        }?.takeIf { it.startsWith("tt") }
+        if (loadedImdbId == null) {
+            Log.d(PlayerRuntimeController.TAG, "Skip segments: no IMDb id for $effectiveId within ${SKIP_IMDB_META_WAIT_MS}ms")
+            return@launch
+        }
+        if (skipIntroFetchedKey != key) return@launch
         val api = withTimeoutOrNull(15_000L) {
-            skipIntroRepository.getSkipIntervals(imdbId, season, episode)
+            skipIntroRepository.getSkipIntervals(loadedImdbId, season, episode)
         } ?: emptyList()
+        if (skipIntroFetchedKey != key) return@launch
         setApiSkipIntervals(api)
     }
 }
+
+/** How long an episode's skip-segment lookup waits for metadata to supply the show's IMDb id. */
+private const val SKIP_IMDB_META_WAIT_MS = 15_000L
+
+/**
+ * The IMDb id to look up an episode's skip segments with: the video id's ("tt…:s:e"), else the
+ * content id's, else the show's from its metadata. Null when none of them is an IMDb id.
+ */
+internal fun episodeSkipImdbId(videoId: String?, contentId: String?, metaImdbId: String?): String? =
+    sequenceOf(
+        videoId?.substringBefore(':'),
+        contentId?.substringBefore(':'),
+        metaImdbId,
+    ).firstOrNull { it != null && it.startsWith("tt") }
 
 /** Store API results and recompute the merged skipIntervals. */
 private fun PlayerRuntimeController.setApiSkipIntervals(api: List<SkipInterval>) {
