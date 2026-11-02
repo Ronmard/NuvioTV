@@ -442,8 +442,8 @@ data class PlayerSettings(
 
         /** Choices for "Countdown before next episode", in seconds; 0 is off. */
         val NEXT_EPISODE_COUNTDOWN_CHOICES: List<Int> = listOf(0, 3, 5, 10, 15)
-        /** On in debug builds, so each prewarm step can be compared with it off; off in release builds. */
-        val DEFAULT_PREWARM_NEXT_EPISODE_ENABLED: Boolean = com.nuvio.tv.BuildConfig.DEBUG
+        /** The prewarm opens the next episode's link early; on in every build. */
+        const val DEFAULT_PREWARM_NEXT_EPISODE_ENABLED: Boolean = true
 
         fun isBoundedTimeout(timeoutSeconds: Int): Boolean =
             timeoutSeconds > 0 && timeoutSeconds != STREAM_AUTOPLAY_TIMEOUT_UNLIMITED
