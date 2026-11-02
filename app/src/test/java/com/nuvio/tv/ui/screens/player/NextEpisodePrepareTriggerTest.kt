@@ -84,4 +84,30 @@ class NextEpisodePrepareTriggerTest {
         val (actions, _) = run(69_500, 70_000, 90_000, 95_000)
         assertEquals(1, actions.fires().size)
     }
+
+    @Test
+    fun `after a run dropped the search, staying past the mark prepares again once playback settles`() {
+        // The run threw away a search in progress, then a seek back (still past the mark)
+        // cancelled it: the trigger starts fresh.
+        val samples = (0..22).map { 90_000L + it * 500L }.toLongArray()
+        val (actions, _) = run(*samples, start = prepareTriggerAfterRunTookNothing())
+        assertEquals(PrepareTriggerAction.None, actions.first())
+        val fireIndex = actions.indexOfFirst { it is PrepareTriggerAction.Fire }
+        assertEquals(PrepareTriggerAction.Fire("settled after resume"), actions[fireIndex])
+        assertEquals(90_000L + PREPARE_SETTLE_MS, samples[fireIndex])
+    }
+
+    @Test
+    fun `after a run dropped the search, a seek past the mark prepares again at once`() {
+        val (actions, _) = run(90_000, 120_000, start = prepareTriggerAfterRunTookNothing())
+        assertEquals(listOf("seek landed past the mark"), actions.fires().map { it.cause })
+    }
+
+    @Test
+    fun `the trigger left as it was would never fire again`() {
+        // What happened before the fix: fired stays set while playback stays past the mark.
+        val (actions, _) = run(90_000, 90_500, 120_000, start = PrepareTriggerState(lastPositionMs = 89_500, fired = true))
+        assertTrue(actions.fires().isEmpty())
+    }
 }
+

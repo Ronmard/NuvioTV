@@ -43,6 +43,13 @@ internal class PreparedNextEpisode(
         }
 }
 
+/**
+ * The trigger after a run started with nothing prepared and dropped a search still in progress:
+ * fresh, so once the run is gone (a seek back cancelled it) the preparation starts again, at the
+ * next seek past the mark or after [PREPARE_SETTLE_MS] of playback past it.
+ */
+internal fun prepareTriggerAfterRunTookNothing(): PrepareTriggerState = PrepareTriggerState()
+
 /** Where the "prepare at" trigger stands for the current episode. */
 internal data class PrepareTriggerState(
     val lastPositionMs: Long? = null,
@@ -134,6 +141,8 @@ internal fun PlayerRuntimeController.onNextEpisodePrepareTick(positionMs: Long, 
         return
     }
     if (durationMs <= 0L || isShortPlaceholderDuration(durationMs)) return
+    // A run in progress has taken (or dropped) the preparation; the trigger waits for it to end.
+    if (nextEpisodeAutoPlayJob?.isActive == true) return
 
     val percent = prepareNextEpisodePercentSetting.coerceIn(1f, 99f)
     val triggerMs = (durationMs * percent / 100f).toLong()
@@ -192,6 +201,8 @@ internal fun PlayerRuntimeController.takePreparedNextEpisode(nextVideoId: String
     val prepared = state.prepared?.takeIf { it.videoId == nextVideoId }
     if (prepared == null) {
         discardPreparedNextEpisode()
+        // If this run is cancelled, the preparation it dropped must be able to start again.
+        state.trigger = prepareTriggerAfterRunTookNothing()
         return null
     }
     state.prepared = null
