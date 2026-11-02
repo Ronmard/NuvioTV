@@ -175,7 +175,7 @@ private fun PlayerRuntimeController.startNextEpisodePrepare() {
         if (result is NextEpisodeSearchResult.Selected && state.episodeVideoId == episodeAtStart) {
             // Opening the link now has the debrid service unlock the file before the switch.
             val prewarm = if (prewarmNextEpisodeEnabledSetting) {
-                prewarmNextEpisodeStream(result.stream, readTail = prewarmNextEpisodeTailEnabledSetting)
+                prewarmNextEpisodeStream(result.stream)
             } else {
                 null
             }

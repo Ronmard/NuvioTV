@@ -956,8 +956,6 @@
     <string name="autoplay_prepare_next_episode">Prepare Next Episode Early</string>
     <string name="autoplay_prewarm_next_episode">Open Next Episode Link Early</string>
     <string name="autoplay_prewarm_next_episode_sub">Once the next episode is prepared, open its link briefly so the debrid service unlocks the file before the episode starts.</string>
-    <string name="autoplay_prewarm_next_episode_tail">Also Read End of File</string>
-    <string name="autoplay_prewarm_next_episode_tail_sub">After opening the link, read the last few megabytes of the file too, where the player looks for its seek index before the first frame.</string>
     <string name="autoplay_prepare_next_episode_sub">Pick the next episode\'s source with the auto-play rules once playback reaches a point in the episode.</string>
     <string name="autoplay_prepare_next_episode_percent">Prepare Next Episode At</string>
     <string name="autoplay_prepare_next_episode_percent_sub">Percent of the episode watched before preparing starts.</string>

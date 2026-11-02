@@ -583,7 +583,6 @@ class PlayerRuntimeController(
     internal var prepareNextEpisodePercentSetting: Float = PlayerSettings.DEFAULT_PREPARE_NEXT_EPISODE_PERCENT
     internal var nextEpisodeCountdownSecondsSetting: Int = 0
     internal var prewarmNextEpisodeEnabledSetting: Boolean = PlayerSettings.DEFAULT_PREWARM_NEXT_EPISODE_ENABLED
-    internal var prewarmNextEpisodeTailEnabledSetting: Boolean = PlayerSettings.DEFAULT_PREWARM_NEXT_EPISODE_TAIL_ENABLED
     internal var nextEpisodeThresholdModeSetting: NextEpisodeThresholdMode = NextEpisodeThresholdMode.PERCENTAGE
     internal var nextEpisodeThresholdPercentSetting: Float = 98f
     internal var nextEpisodeThresholdMinutesBeforeEndSetting: Float = 2f
