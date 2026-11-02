@@ -290,3 +290,27 @@ data class NextEpisodeLeadCountdown(val remainingMs: Long, val totalMs: Long) {
     val remainingSeconds: Int get() = ((remainingMs + 999) / 1_000).toInt()
     val remainingFraction: Float get() = (remainingMs.toFloat() / totalMs).coerceIn(0f, 1f)
 }
+
+/** Longest source name the next-episode card shows before shortening it. */
+internal const val NEXT_EPISODE_SOURCE_LABEL_MAX_CHARS = 24
+
+/**
+ * The source name for the next-episode card ("Playing via <name> in Ns"): addon names often span
+ * several lines and carry invisible formatting characters, and the card shows one line, so a long
+ * name would push the seconds out of view. This keeps the first non-blank line, drops formatting
+ * characters, collapses spaces and shortens it; falls back to [addonName].
+ */
+internal fun nextEpisodeSourceLabel(streamName: String?, addonName: String): String {
+    fun clean(raw: String?): String? = raw
+        ?.lineSequence()
+        ?.map { line ->
+            line.filterNot { Character.getType(it) == Character.FORMAT.toInt() }
+                .replace(Regex("\\s+"), " ")
+                .trim()
+        }
+        ?.firstOrNull { it.isNotEmpty() }
+    val label = clean(streamName) ?: clean(addonName) ?: addonName.trim()
+    return if (label.length <= NEXT_EPISODE_SOURCE_LABEL_MAX_CHARS) label
+    else label.take(NEXT_EPISODE_SOURCE_LABEL_MAX_CHARS - 1).trimEnd() + "\u2026"
+}
+

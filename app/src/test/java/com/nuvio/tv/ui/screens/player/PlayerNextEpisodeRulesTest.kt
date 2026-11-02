@@ -399,4 +399,28 @@ class PlayerNextEpisodeRulesTest {
     fun `an unknown auto-start point keeps the jump`() {
         assertFalse(skipToNext(target = 99_000L, autoStart = null))
     }
+
+    // ---- source label on the card ----
+
+    @Test
+    fun `a multi-line addon name keeps its first line without invisible characters`() {
+        val name = "1080P\u200d\u200d    \u200d\u200d\u200d\u26a1\u200d\u200d\n\u3008Bluray\u3009\u200d     \u200d\n\u2605\u2605"
+        assertEquals("1080P \u26a1", nextEpisodeSourceLabel(name, "AIOStreams"))
+    }
+
+    @Test
+    fun `a blank or missing name falls back to the addon`() {
+        assertEquals("Torrentio", nextEpisodeSourceLabel(null, "Torrentio"))
+        assertEquals("Torrentio", nextEpisodeSourceLabel(" \n\u200d\n ", "Torrentio"))
+        assertEquals("Torrentio", nextEpisodeSourceLabel("", " Torrentio "))
+    }
+
+    @Test
+    fun `a long name is shortened so the seconds stay visible`() {
+        val label = nextEpisodeSourceLabel("A very long source name that goes on and on", "x")
+        assertEquals(NEXT_EPISODE_SOURCE_LABEL_MAX_CHARS, label.length)
+        assertTrue(label.endsWith("\u2026"))
+        assertEquals("1080p", nextEpisodeSourceLabel("1080p", "x"))
+    }
 }
+

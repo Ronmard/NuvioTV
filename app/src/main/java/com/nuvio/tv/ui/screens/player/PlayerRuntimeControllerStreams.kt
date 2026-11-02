@@ -1989,7 +1989,7 @@ internal fun PlayerRuntimeController.playNextEpisode(userInitiated: Boolean = fa
             }
             if (result is NextEpisodeSearchResult.Selected) {
                 val streamToPlay = result.stream
-                val sourceName = (streamToPlay.name?.takeIf { it.isNotBlank() } ?: streamToPlay.addonName).trim()
+                val sourceName = nextEpisodeSourceLabel(streamToPlay.name, streamToPlay.addonName)
                 // A prepared episode switches at once: its countdown, if one is set, already ran on
                 // the card up to this point.
                 val countdownSeconds = if (preparedStream != null) 0 else 3

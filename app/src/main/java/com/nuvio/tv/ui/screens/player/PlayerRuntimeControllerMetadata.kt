@@ -556,7 +556,7 @@ private fun PlayerRuntimeController.currentNextEpisodeLeadCountdown(
     ) ?: return null
     val countdown = PlayerNextEpisodeRules.leadCountdown(positionMs, startMs, totalMs) ?: return null
     val stream = prepared.stream
-    val sourceName = (stream.name?.takeIf { it.isNotBlank() } ?: stream.addonName).trim()
+    val sourceName = nextEpisodeSourceLabel(stream.name, stream.addonName)
     return LeadCountdownDisplay(countdown, sourceName)
 }
 
