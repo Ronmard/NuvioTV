@@ -583,6 +583,8 @@ class PlayerRuntimeController(
     internal var prepareNextEpisodePercentSetting: Float = PlayerSettings.DEFAULT_PREPARE_NEXT_EPISODE_PERCENT
     internal var nextEpisodeCountdownSecondsSetting: Int = 0
     internal var prewarmNextEpisodeEnabledSetting: Boolean = PlayerSettings.DEFAULT_PREWARM_NEXT_EPISODE_ENABLED
+    internal var nextEpisodePreloadEnabledSetting: Boolean = PlayerSettings.DEFAULT_NEXT_EPISODE_PRELOAD_ENABLED
+    internal val nextEpisodePreload = NextEpisodePreloadState()
     internal var nextEpisodeThresholdModeSetting: NextEpisodeThresholdMode = NextEpisodeThresholdMode.PERCENTAGE
     internal var nextEpisodeThresholdPercentSetting: Float = 98f
     internal var nextEpisodeThresholdMinutesBeforeEndSetting: Float = 2f
@@ -840,6 +842,7 @@ class PlayerRuntimeController(
     fun onCleared() {
         playerSession.close()
         stopServerPlayback()
+        releasePendingNextEpisodePreload("exit")
         releasePlayer()
         stopTorrentStream()
         torrentService.shutdown()

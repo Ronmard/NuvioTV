@@ -247,6 +247,13 @@ internal fun PlaybackUpNextSection(
                 checked = settings.prewarmNextEpisodeEnabled,
                 onToggle = { onUpdate { setPrewarmNextEpisodeEnabled(!settings.prewarmNextEpisodeEnabled) } }
             )
+
+            SettingsToggleRow(
+                title = stringResource(R.string.autoplay_next_episode_preload),
+                subtitle = stringResource(R.string.autoplay_next_episode_preload_sub),
+                checked = settings.nextEpisodePreloadEnabled,
+                onToggle = { onUpdate { setNextEpisodePreloadEnabled(!settings.nextEpisodePreloadEnabled) } }
+            )
         }
     }
 

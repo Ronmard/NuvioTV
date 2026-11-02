@@ -142,6 +142,8 @@ private fun PlayerRuntimeController.disposeExoPlayerBeforeRebuild() {
     }
     _exoPlayer = null
     playbackSpeedAwareAudioSink = null
+    // The preloaded source the player played from goes with it.
+    releaseInUseNextEpisodePreload()
 }
 
 /**
@@ -300,6 +302,9 @@ internal fun PlayerRuntimeController.initializePlayer(
                 )
             }
             if (effectiveInternalPlayerEngine == InternalPlayerEngine.MVP_PLAYER) {
+                // Preloads are ExoPlayer only.
+                releasePendingNextEpisodePreload("switched to mpv")
+                nextEpisodePreload.lastSetup = null
                 mpvInitializationInProgress = true
                 try {
                     val awaitedAfr = withTimeoutOrNull(AFR_PREFLIGHT_TOTAL_TIMEOUT_MS) {
@@ -974,24 +979,49 @@ internal fun PlayerRuntimeController.initializePlayer(
             // still swaps stock Matroska for the vendored extractor (DTS-HD MA / DTS:X
             // first-sample sniff). MP4/TS extractors are returned untouched when
             // config is inactive.
+            val dolbyVisionConversionConfig = DolbyVisionConversionConfig(
+                active = isExperimentalDv7ToDv81ActiveForCurrentPlayback,
+                forcedMode = when {
+                    libdoviModeOverrideActive -> libdoviModeOverride
+                    dv7Mode1Forced -> 1
+                    else -> -1
+                },
+                preserveMapping = playerSettings.dv7ToDv81PreserveMappingEnabled &&
+                        manualDv81Selected,
+                dv5Enabled = playerSettings.dv5ToDv81Enabled,
+                manualDv81 = manualDv81Selected && !dv7Mode1Forced
+            )
             val effectiveExtractorsFactory: ExtractorsFactory =
                     DolbyVisionExtractorsFactory(
                         delegate = extractorsFactory,
-                        config = DolbyVisionConversionConfig(
-                            active = isExperimentalDv7ToDv81ActiveForCurrentPlayback,
-                            forcedMode = when {
-                                libdoviModeOverrideActive -> libdoviModeOverride
-                                dv7Mode1Forced -> 1
-                                else -> -1
-                            },
-                            preserveMapping = playerSettings.dv7ToDv81PreserveMappingEnabled &&
-                                    manualDv81Selected,
-                            dv5Enabled = playerSettings.dv5ToDv81Enabled,
-                            manualDv81 = manualDv81Selected && !dv7Mode1Forced
-                        ),
+                        config = dolbyVisionConversionConfig,
                         stripDvRpu = stripDvRpuEnabled,
                         stripHdr10PlusSei = stripHdr10PlusSei
                     ).let { autoSyncExtractorsFactory(it, url, headers) } // AutoSync hook
+
+            // What shapes this media source, to match against a preloaded next episode.
+            val nextEpisodePreloadFingerprint = NextEpisodePreloadFingerprint(
+                key = NextEpisodePreloadKey(
+                    url = url,
+                    headers = headers,
+                    mimeType = currentStreamMimeType,
+                    filename = currentFilename,
+                    cacheKey = currentStreamCacheKey,
+                    responseHeaders = currentStreamResponseHeaders,
+                ),
+                setup = NextEpisodePreloadSetup(
+                    dolbyVision = dolbyVisionConversionConfig,
+                    stripDvRpu = stripDvRpuEnabled,
+                    stripHdr10PlusSei = stripHdr10PlusSei,
+                    useLibass = useLibass,
+                    autoSyncEnabled = com.nuvio.tv.ui.screens.player.autosync.AutoSyncPreferences.isEnabled(context),
+                    stockLoadControl = !playerSettings.nuvioPerformanceModeEnabled && !playerSettings.bufferEngineEnabled,
+                    vodCacheEnabled = mediaSourceFactory.vodCacheEnabled,
+                    parallelConnections = mediaSourceFactory.useParallelConnections,
+                    startupSubtitles = buildStartupSubtitleConfigurations(startupSubtitlePreparation).isNotEmpty(),
+                ),
+            )
+            var nextEpisodePreloadHit: NextEpisodePreloadHit? = null
 
             setLoadingStatus(
                 phase = "building_player",
@@ -1010,14 +1040,17 @@ internal fun PlayerRuntimeController.initializePlayer(
                     subtitleParserFactory = null
                 )
                 val playerDataSourceFactory = PlayerPlaybackNetworking.createDataSourceFactory(context, headers)
+                val preloadHit = nextEpisodePreloadHit
                 ExoPlayer.Builder(context)
                     .setBandwidthMeter(bandwidthMeter)
                     .setTrackSelector(trackSelector!!)
                     .setMediaSourceFactory(DefaultMediaSourceFactory(playerDataSourceFactory, effectiveExtractorsFactory))
                     .setRenderersFactory(renderersFactory)
-                    .setLoadControl(loadControl)
+                    .setLoadControl(preloadHit?.loadControl ?: loadControl)
                     .setReleaseTimeoutMs(PLAYER_RELEASE_TIMEOUT_MS)
                     .setVideoChangeFrameRateStrategy(C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_OFF)
+                    // A preloaded source must play on the thread it was prepared on.
+                    .apply { if (preloadHit != null) setPlaybackLooper(preloadHit.looper) }
                     .build()
             }
 
@@ -1031,6 +1064,12 @@ internal fun PlayerRuntimeController.initializePlayer(
                 return@launch
             }
 
+            // Hand over a preloaded next episode when nothing that shapes its source changed.
+            nextEpisodePreloadHit = takeNextEpisodePreload(
+                actual = nextEpisodePreloadFingerprint,
+                resumePositionMs = resolvePendingInitialResumePosition(),
+            )
+
             _exoPlayer = if (useLibass) {
                 // Set libass render scale before building the player - this controls
                 // the rasterization resolution of the atlas pipeline.
@@ -1038,24 +1077,43 @@ internal fun PlayerRuntimeController.initializePlayer(
                     playerSettings.libassRenderScale.scale
                 )
                 val playerDataSourceFactory = PlayerPlaybackNetworking.createDataSourceFactory(context, headers)
+                val preloadHit = nextEpisodePreloadHit
+                val preloadedAssHandler = preloadHit?.preload?.assHandler
                 ExoPlayer.Builder(context)
                     .setBandwidthMeter(bandwidthMeter)
-                    .setLoadControl(loadControl)
+                    .setLoadControl(preloadHit?.loadControl ?: loadControl)
                     .setTrackSelector(trackSelector!!)
                     .setMediaSourceFactory(DefaultMediaSourceFactory(playerDataSourceFactory, effectiveExtractorsFactory))
                     .setReleaseTimeoutMs(PLAYER_RELEASE_TIMEOUT_MS)
                     .setVideoChangeFrameRateStrategy(C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_OFF)
-                    .buildWithAssSupportCompat(
-                        context = context,
-                        playerMediaSourceFactory = mediaSourceFactory,
-                        dataSourceFactory = playerDataSourceFactory,
-                        extractorsFactory = effectiveExtractorsFactory,
-                        renderersFactory = renderersFactory
-                    )
+                    // A preloaded source must play on the thread it was prepared on.
+                    .apply { if (preloadHit != null) setPlaybackLooper(preloadHit.looper) }
+                    .let { builder ->
+                        if (preloadedAssHandler != null) {
+                            // The preload's handler, connected once the file is set.
+                            builder.buildWithAssSupportCompat(
+                                context = context,
+                                playerMediaSourceFactory = mediaSourceFactory,
+                                dataSourceFactory = playerDataSourceFactory,
+                                extractorsFactory = effectiveExtractorsFactory,
+                                renderersFactory = renderersFactory,
+                                assHandler = preloadedAssHandler,
+                                connectHandler = false,
+                            )
+                        } else {
+                            builder.buildWithAssSupportCompat(
+                                context = context,
+                                playerMediaSourceFactory = mediaSourceFactory,
+                                dataSourceFactory = playerDataSourceFactory,
+                                extractorsFactory = effectiveExtractorsFactory,
+                                renderersFactory = renderersFactory
+                            )
+                        }
+                    }
             } else {
                 buildDefaultPlayer()
             }
-            _loadControl = loadControl
+            _loadControl = nextEpisodePreloadHit?.loadControl ?: loadControl
             activePlayerUsesLibass = useLibass
             libassPipelineSwitchInFlight = false
 
@@ -1118,7 +1176,13 @@ internal fun PlayerRuntimeController.initializePlayer(
                         "bufferEngine=${playerSettings.bufferEngineEnabled} parallel=${mediaSourceFactory.useParallelConnections} " +
                         "vodCache=${mediaSourceFactory.vodCacheEnabled} tunneling=$tunnelingActive"
                 )
-                val initialMediaSource = mediaSourceFactory.createMediaSource(
+                val confirmedPreloadSource = confirmNextEpisodePreload(nextEpisodePreloadHit, rendererCount)
+                // A preload's handler waits to connect until its file is set; if that file is
+                // not the preloaded one after all, connect now, the way a libass player always does.
+                val connectAssHandlerAfterFileSet = useLibass && nextEpisodePreloadHit?.preload?.assHandler != null
+                if (connectAssHandlerAfterFileSet && confirmedPreloadSource == null) connectAssHandlerCompat()
+                val initialMediaSource = confirmedPreloadSource
+                    ?: mediaSourceFactory.createMediaSource(
                     context = context,
                     url = url,
                     headers = headers,
@@ -1138,6 +1202,19 @@ internal fun PlayerRuntimeController.initializePlayer(
                     updatePlaybackTimeline(currentPosition = initialResumePosition)
                 } else {
                     setMediaSource(initialMediaSource)
+                }
+                // Connected after the file is set, the handler misses that file's announcement
+                // (which resets it) and keeps the fonts and subtitle tracks the preload gave it.
+                if (connectAssHandlerAfterFileSet && confirmedPreloadSource != null) {
+                    connectAssHandlerCompat()
+                    // The preload gave the handler the file's subtitle tracks; none here means the
+                    // handler was reset on the way, and this episode's ASS subtitles will not show.
+                    if (getAssHandlerCompat()?.hasTracks() == false) {
+                        Log.w(
+                            PlayerRuntimeController.TAG,
+                            "NEXT_EPISODE_PRELOAD: libass handler has no subtitle tracks after the handoff"
+                        )
+                    }
                 }
 
                 setLoadingStatus(

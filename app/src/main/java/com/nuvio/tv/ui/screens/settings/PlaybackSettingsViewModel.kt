@@ -567,6 +567,10 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setPrewarmNextEpisodeEnabled(enabled)
     }
 
+    suspend fun setNextEpisodePreloadEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setNextEpisodePreloadEnabled(enabled)
+    }
+
     suspend fun setStillWatchingEnabled(enabled: Boolean) {
         playerSettingsDataStore.setStillWatchingEnabled(enabled)
     }

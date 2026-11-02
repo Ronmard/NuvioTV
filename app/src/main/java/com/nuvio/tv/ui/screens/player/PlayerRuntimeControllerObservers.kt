@@ -407,6 +407,8 @@ internal fun PlayerRuntimeController.observeSubtitleSettings() {
             prepareNextEpisodePercentSetting = settings.prepareNextEpisodePercent
             nextEpisodeCountdownSecondsSetting = settings.nextEpisodeCountdownSeconds
             prewarmNextEpisodeEnabledSetting = settings.prewarmNextEpisodeEnabled
+            nextEpisodePreloadEnabledSetting = settings.nextEpisodePreloadEnabled
+            if (!nextEpisodePreloadEnabledSetting) releasePendingNextEpisodePreload("turned off")
             _uiState.update {
                 it.copy(
                     streamAutoPlayMode = settings.streamAutoPlayMode,

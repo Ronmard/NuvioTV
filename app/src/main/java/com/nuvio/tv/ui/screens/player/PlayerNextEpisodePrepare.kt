@@ -5,6 +5,7 @@ import com.nuvio.tv.domain.model.Stream
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 
 /** A sample this close after the previous one (and not before it) is normal playback, not a seek. */
 internal const val PREPARE_CONTINUITY_MS = 3_000L
@@ -118,12 +119,12 @@ internal fun PlayerRuntimeController.onNextEpisodePrepareTick(positionMs: Long, 
     val state = nextEpisodePrepare
     val videoId = currentVideoId
     if (state.episodeVideoId != videoId) {
-        discardPreparedNextEpisode()
+        discardPreparedNextEpisode("episode changed")
         state.episodeVideoId = videoId
         state.streamUrl = currentStreamUrl
         state.trigger = PrepareTriggerState()
     } else if (state.streamUrl != currentStreamUrl) {
-        discardPreparedNextEpisode()
+        discardPreparedNextEpisode("source changed")
         state.streamUrl = currentStreamUrl
         state.trigger = PrepareTriggerState()
     }
@@ -135,7 +136,7 @@ internal fun PlayerRuntimeController.onNextEpisodePrepareTick(positionMs: Long, 
         contentType.equals("cloud", ignoreCase = true) || isPartyControlLocked
     ) {
         if (state.trigger.fired) {
-            discardPreparedNextEpisode()
+            discardPreparedNextEpisode("prepare no longer applies")
             state.trigger = state.trigger.copy(fired = false)
         }
         return
@@ -150,7 +151,7 @@ internal fun PlayerRuntimeController.onNextEpisodePrepareTick(positionMs: Long, 
     state.trigger = trigger
     when (action) {
         PrepareTriggerAction.None -> Unit
-        PrepareTriggerAction.Rearm -> discardPreparedNextEpisode()
+        PrepareTriggerAction.Rearm -> discardPreparedNextEpisode("seek back below the mark")
         is PrepareTriggerAction.Fire -> startNextEpisodePrepare()
     }
 }
@@ -162,6 +163,7 @@ private fun PlayerRuntimeController.startNextEpisodePrepare() {
     val episodeAtStart = state.episodeVideoId
     state.job?.cancel()
     state.prepared = null
+    releasePendingNextEpisodePreload("prepare restarted")
     state.job = scope.launch {
         val playerSettings = playerSettingsDataStore.playerSettings.first()
         val result = searchNextEpisodeStream(
@@ -188,6 +190,16 @@ private fun PlayerRuntimeController.startNextEpisodePrepare() {
                 sourceStream = result.sourceStream,
                 prewarm = prewarm,
             )
+            // Read the header of the link the switch will open, on the shared playback thread.
+            if (nextEpisodePreloadEnabledSetting) {
+                val notStarted = nextEpisodeDebridGate.withLock {
+                    preloadNextEpisode(result.stream.withPrewarmedUrl(prewarm?.usableFinalUrl))
+                }
+                if (notStarted != null) {
+                    nextEpisodePreload.lastReleaseReason = "not preloaded: $notStarted"
+                    android.util.Log.i(PlayerRuntimeController.TAG, "NEXT_EPISODE_PRELOAD: skipped ($notStarted)")
+                }
+            }
         }
     }
 }
@@ -200,7 +212,7 @@ internal fun PlayerRuntimeController.takePreparedNextEpisode(nextVideoId: String
     val state = nextEpisodePrepare
     val prepared = state.prepared?.takeIf { it.videoId == nextVideoId }
     if (prepared == null) {
-        discardPreparedNextEpisode()
+        discardPreparedNextEpisode("run found nothing prepared")
         // If this run is cancelled, the preparation it dropped must be able to start again.
         state.trigger = prepareTriggerAfterRunTookNothing()
         return null
@@ -223,7 +235,8 @@ internal fun PlayerRuntimeController.restorePreparedNextEpisode(prepared: Prepar
     }
 }
 
-internal fun PlayerRuntimeController.discardPreparedNextEpisode() {
+internal fun PlayerRuntimeController.discardPreparedNextEpisode(reason: String = "discarded") {
+    releasePendingNextEpisodePreload(reason)
     val state = nextEpisodePrepare
     state.job?.cancel()
     state.job = null

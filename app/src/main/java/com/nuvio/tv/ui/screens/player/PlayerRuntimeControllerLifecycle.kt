@@ -111,6 +111,8 @@ internal fun PlayerRuntimeController.releasePlayer(
         runCatching { player.release() }
     }
     _exoPlayer = null
+    // The preloaded source the player played from goes with it.
+    releaseInUseNextEpisodePreload()
     activeAssVideoEffect = null
     _loadControl = null
     currentBitrateAwareLoadControl = null

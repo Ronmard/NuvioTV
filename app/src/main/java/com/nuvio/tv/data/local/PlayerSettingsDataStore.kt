@@ -350,6 +350,8 @@ data class PlayerSettings(
     val nextEpisodeCountdownSeconds: Int = 0,
     /** Open the prepared link ahead of time so the debrid service unlocks the file early. */
     val prewarmNextEpisodeEnabled: Boolean = DEFAULT_PREWARM_NEXT_EPISODE_ENABLED,
+    /** Read the prepared next episode's header in the background, so its switch skips that wait. */
+    val nextEpisodePreloadEnabled: Boolean = DEFAULT_NEXT_EPISODE_PRELOAD_ENABLED,
     val stillWatchingEnabled: Boolean = false,
     val stillWatchingEpisodeThreshold: Int = DEFAULT_STILL_WATCHING_EPISODE_THRESHOLD,
     val nextEpisodeThresholdMode: NextEpisodeThresholdMode = NextEpisodeThresholdMode.PERCENTAGE,
@@ -444,6 +446,8 @@ data class PlayerSettings(
         val NEXT_EPISODE_COUNTDOWN_CHOICES: List<Int> = listOf(0, 3, 5, 10, 15)
         /** The prewarm opens the next episode's link early; on in every build. */
         const val DEFAULT_PREWARM_NEXT_EPISODE_ENABLED: Boolean = true
+        /** The next-episode preload; on in every build (it skips itself when memory is short). */
+        const val DEFAULT_NEXT_EPISODE_PRELOAD_ENABLED: Boolean = true
 
         fun isBoundedTimeout(timeoutSeconds: Int): Boolean =
             timeoutSeconds > 0 && timeoutSeconds != STREAM_AUTOPLAY_TIMEOUT_UNLIMITED
@@ -701,6 +705,7 @@ class PlayerSettingsDataStore @Inject constructor(
     private val prepareNextEpisodePercentKey = floatPreferencesKey("prepare_next_episode_percent")
     private val nextEpisodeCountdownSecondsKey = intPreferencesKey("next_episode_countdown_seconds")
     private val prewarmNextEpisodeEnabledKey = booleanPreferencesKey("prewarm_next_episode_enabled")
+    private val nextEpisodePreloadEnabledKey = booleanPreferencesKey("next_episode_preload_enabled")
     private val stillWatchingEnabledKey = booleanPreferencesKey("still_watching_enabled")
     private val stillWatchingEpisodeThresholdKey = intPreferencesKey("still_watching_episode_threshold")
     private val nextEpisodeThresholdModeKey = stringPreferencesKey("next_episode_threshold_mode")
@@ -1118,6 +1123,8 @@ class PlayerSettingsDataStore @Inject constructor(
                     ?.takeIf { it in PlayerSettings.NEXT_EPISODE_COUNTDOWN_CHOICES } ?: 0,
                 prewarmNextEpisodeEnabled = prefs[prewarmNextEpisodeEnabledKey]
                     ?: PlayerSettings.DEFAULT_PREWARM_NEXT_EPISODE_ENABLED,
+                nextEpisodePreloadEnabled = prefs[nextEpisodePreloadEnabledKey]
+                    ?: PlayerSettings.DEFAULT_NEXT_EPISODE_PRELOAD_ENABLED,
                 stillWatchingEnabled = prefs[stillWatchingEnabledKey] ?: false,
                 stillWatchingEpisodeThreshold = prefs[stillWatchingEpisodeThresholdKey]
                     ?.coerceIn(
@@ -1561,6 +1568,12 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setPrewarmNextEpisodeEnabled(enabled: Boolean) {
         store().edit { prefs ->
             prefs[prewarmNextEpisodeEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setNextEpisodePreloadEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[nextEpisodePreloadEnabledKey] = enabled
         }
     }
 

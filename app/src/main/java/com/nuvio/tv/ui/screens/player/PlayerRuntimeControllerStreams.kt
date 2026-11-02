@@ -2038,6 +2038,7 @@ internal fun PlayerRuntimeController.playNextEpisode(userInitiated: Boolean = fa
             if (prepared != null && !preparedUsed) restorePreparedNextEpisode(prepared)
             throw e
         } catch (e: Exception) {
+            releasePendingNextEpisodePreload("run failed")
             _uiState.update {
                 it.copy(
                     postPlayMode = null,

@@ -29,9 +29,15 @@ internal fun ExoPlayer.Builder.buildWithAssSupportCompat(
     playerMediaSourceFactory: PlayerMediaSourceFactory? = null,
     dataSourceFactory: DataSource.Factory = PlayerPlaybackNetworking.createDataSourceFactory(context),
     extractorsFactory: ExtractorsFactory = DefaultExtractorsFactory(),
-    renderersFactory: RenderersFactory = DefaultRenderersFactory(context)
+    renderersFactory: RenderersFactory = DefaultRenderersFactory(context),
+    // A preloaded next episode brings its own handler, which already holds the file's
+    // fonts and subtitle tracks.
+    assHandler: AssHandler = AssHandler(),
+    // False leaves the handler unconnected; connectAssHandlerCompat() then connects it
+    // after the preloaded file is set, so the handler misses that file's announcement and keeps
+    // what the preload gave it (the announcement resets the handler).
+    connectHandler: Boolean = true,
 ): ExoPlayer {
-    val assHandler = AssHandler()
     val assSubtitleParserFactory = CompatAssSubtitleParserFactory(assHandler)
     val assExtractorsFactory = extractorsFactory.withAssMkvSupportCompat(
         subtitleParserFactory = assSubtitleParserFactory,
@@ -57,8 +63,26 @@ internal fun ExoPlayer.Builder.buildWithAssSupportCompat(
         .build()
 
     assHandlersByPlayer[player] = assHandler
-    assHandler.init(player)
+    if (connectHandler) assHandler.init(player)
     return player
+}
+
+/** Connects a handler built with connectHandler = false to its player. */
+internal fun ExoPlayer.connectAssHandlerCompat() {
+    assHandlersByPlayer[this]?.init(this)
+}
+
+/**
+ * The extractors and subtitle parser factory a libass player reads a file with, for a
+ * preload that reads the next episode's header before its player exists.
+ */
+@OptIn(UnstableApi::class)
+internal fun libassPreloadParsingCompat(
+    extractorsFactory: ExtractorsFactory,
+    assHandler: AssHandler,
+): Pair<ExtractorsFactory, SubtitleParser.Factory> {
+    val parserFactory = CompatAssSubtitleParserFactory(assHandler)
+    return extractorsFactory.withAssMkvSupportCompat(parserFactory, assHandler) to parserFactory
 }
 
 internal fun ExoPlayer.getAssHandlerCompat(): AssHandler? = assHandlersByPlayer[this]

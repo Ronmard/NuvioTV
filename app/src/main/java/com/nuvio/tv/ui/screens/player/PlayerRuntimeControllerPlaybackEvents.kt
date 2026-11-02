@@ -1996,6 +1996,7 @@ fun PlayerRuntimeController.onEvent(
             playNextEpisode(userInitiated = true)
         }
         PlayerEvent.OnDismissNextEpisodeCard -> {
+            releasePendingNextEpisodePreload("back on the card")
             nextEpisodeAutoPlayJob?.cancel()
             nextEpisodeAutoPlayJob = null
             _uiState.update {
